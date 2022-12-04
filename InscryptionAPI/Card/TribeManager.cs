@@ -7,6 +7,7 @@ using UnityEngine;
 using HarmonyLib;
 using InscryptionAPI.Guid;
 using InscryptionAPI.Helpers;
+using InscryptionAPI.Rulebook;
 
 namespace InscryptionAPI.Card;
 
@@ -18,12 +19,43 @@ namespace InscryptionAPI.Card;
 [HarmonyPatch]
 public class TribeManager
 {
-    private static readonly List<TribeInfo> tribes = new();
-    private static readonly List<Tribe> tribeTypes = new();
-    public static readonly ReadOnlyCollection<TribeInfo> NewTribes = new(tribes);
-    public static readonly ReadOnlyCollection<Tribe> NewTribesTypes = new(tribeTypes);
+    private static readonly List<TribeInfo> allTribes = new();
+    private static readonly List<TribeInfo> newTribes = new();
+    private static readonly List<TribeInfo> baseTribes = GetBaseTribeInfos();
+    
+    public static readonly ReadOnlyCollection<TribeInfo> BaseTribesInfos = new(baseTribes);
+    public static readonly ReadOnlyCollection<TribeInfo> NewTribes = new(newTribes);
+    public static readonly ReadOnlyCollection<TribeInfo> AllTribesInfos = new(allTribes);
 
     private static Texture2D TribeIconMissing = TextureHelper.GetImageAsTexture("tribeicon_none.png", Assembly.GetExecutingAssembly());
+
+    private static List<TribeInfo> GetBaseTribeInfos()
+    {
+        List<TribeInfo> tribeInfos = new List<TribeInfo>();
+        void ToInfo(Tribe tribe, bool tribeChoice, Texture2D back, string rulebookName, string rulebookDescription)
+        {
+            TribeInfo info = new TribeInfo
+            {
+                tribe = tribe,
+                icon = GetBaseTribeIcon(tribe),
+                tribeChoice = tribeChoice,
+                cardback = back,
+                rulebookName = rulebookName,
+                rulebookDescription = rulebookDescription
+            };
+            tribeInfos.Add(info);
+            allTribes.Add(info);
+        }
+
+        ToInfo(Tribe.Squirrel, true, null, "Squirrel", "Fluffy small creatures");
+        ToInfo(Tribe.Bird, true, null, "Feathered", "Flying creatures!");
+        ToInfo(Tribe.Canine, true, null, "Canine", "Wolves and dog creatures");
+        ToInfo(Tribe.Hooved, true, null, "Hooved", "Four legged creatures");
+        ToInfo(Tribe.Reptile, true, null, "Reptilian", "Gross slithery creatures");
+        ToInfo(Tribe.Insect, true, null, "Insectoid", "Tiny bugs");
+
+        return tribeInfos;
+    }
     
     [HarmonyPatch(typeof(CardDisplayer3D), nameof(CardDisplayer3D.UpdateTribeIcon))]
     [HarmonyPostfix]
@@ -31,7 +63,7 @@ public class TribeManager
     {
         if (info != null)
         {
-            foreach (TribeInfo tribe in tribes)
+            foreach (TribeInfo tribe in newTribes)
             {
                 if (tribe?.icon != null)
                 {
@@ -66,7 +98,7 @@ public class TribeManager
     {
         if (choice != null && choice.tribe != Tribe.None && __result == null)
         {
-            __result = tribes?.Find((x) => x != null && x.tribe == choice.tribe)?.cardback;
+            __result = newTribes?.Find((x) => x != null && x.tribe == choice.tribe)?.cardback;
         }
     }
 
@@ -82,9 +114,9 @@ public class TribeManager
             Tribe.Insect,
             Tribe.Reptile
         };
-        list.AddRange(TribeManager.tribes.FindAll((x) => x != null && x.tribeChoice).ConvertAll((x) => x.tribe));
+        list.AddRange(TribeManager.newTribes.FindAll((x) => x != null && x.tribeChoice).ConvertAll((x) => x.tribe));
         List<Tribe> tribes = new(RunState.CurrentMapRegion.dominantTribes);
-        tribes.RemoveAll(x => TribeManager.tribes.Exists(x2 => x2.tribe == x) && !TribeManager.tribes.Find(x2 => x2.tribe == x).tribeChoice);
+        tribes.RemoveAll(x => TribeManager.newTribes.Exists(x2 => x2.tribe == x) && !TribeManager.newTribes.Find(x2 => x2.tribe == x).tribeChoice);
         list.RemoveAll((Tribe x) => tribes.Contains(x));
         while (tribes.Count < 3)
         {
@@ -107,6 +139,39 @@ public class TribeManager
         __result = list2;
         return false;
     }
+    
+    [HarmonyPatch(typeof(RuleBookInfo), nameof(RuleBookInfo.ConstructPageData))]
+    [HarmonyPostfix]
+    private static void ConstructPageData(ref List<RuleBookPageInfo> __result, RuleBookInfo __instance, AbilityMetaCategory metaCategory)
+    {
+        if (metaCategory != AbilityMetaCategory.Part1Rulebook)
+        {
+            return;
+        }
+
+        // TODO: Custom rangePrefab
+        GameObject rangePrefab = __instance.pageRanges.Find((a) => a.type == PageRangeType.Items).rangePrefab;
+        GameObject tribePrefab = GameObject.Instantiate(rangePrefab, rangePrefab.transform.parent);
+        ItemPage itemPage = tribePrefab.GetComponent<ItemPage>();
+        TribePage tribePage = tribePrefab.AddComponent<TribePage>();
+        tribePage.iconRenderer = itemPage.iconRenderer;
+        tribePage.nameTextMesh = itemPage.nameTextMesh;
+        tribePage.descriptionTextMesh = itemPage.descriptionTextMesh;
+        UnityObject.Destroy(itemPage);
+
+        List<Tribe> baseTribes = Enum.GetValues(typeof(Tribe)).Cast<Tribe>().ToList();
+        baseTribes.Remove(Tribe.None);
+        baseTribes.Remove(Tribe.NUM_TRIBES);
+        
+        foreach (TribeInfo tribe in allTribes)
+        {
+            RuleBookPageInfo info = new();
+            info.pageId = tribe.tribe.ToString();
+            info.pagePrefab = tribePrefab;
+            info.headerText = string.Format(Localization.Translate("APPENDIX XIII, SUBSECTION I - TRIBES {0}"), __result.Count);
+            __result.Add(info);
+        }
+    }
 
     /// <summary>
     /// Adds a new tribe to the game
@@ -121,8 +186,8 @@ public class TribeManager
     {
         Tribe tribe = GuidManager.GetEnumValue<Tribe>(guid, name);
         TribeInfo info = new() { tribe = tribe, icon = tribeIcon?.ConvertTexture(), cardback = choiceCardbackTexture, tribeChoice = appearInTribeChoices };
-        tribes.Add(info);
-        tribeTypes.Add(tribe);
+        newTribes.Add(info);
+        allTribes.Add(info);
         return tribe;
     }
 
@@ -143,7 +208,26 @@ public class TribeManager
 
     public static bool IsCustomTribe(Tribe tribe)
     {
-        return tribeTypes.Contains(tribe);
+        foreach (TribeInfo info in newTribes)
+        {
+            if (info.tribe == tribe)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static TribeInfo GetTribeInfo(Tribe tribe)
+    {
+        foreach (TribeInfo info in allTribes)
+        {
+            if (info.tribe == tribe)
+            {
+                return info;
+            }
+        }
+        return null;
     }
     
     public static Texture2D GetTribeIcon(Tribe tribe, bool useMissingIconIfNull=true)
@@ -166,12 +250,7 @@ public class TribeManager
         else
         {
             // Vanilla tribe icon
-            string str = "Art/Cards/TribeIcons/tribeicon_" + tribe.ToString().ToLowerInvariant();
-            Sprite sprite = ResourceBank.Get<Sprite>(str);
-            if (sprite != null)
-            {
-                texture2D = sprite.texture;
-            }
+            texture2D = GetBaseTribeIcon(tribe).texture;
         }
         
         if(texture2D == null && useMissingIconIfNull)
@@ -180,6 +259,16 @@ public class TribeManager
         }
         return texture2D;
     }
+    private static Sprite GetBaseTribeIcon(Tribe tribe)
+    {
+        string str = "art/cards/tribeIcons/tribeicon_" + tribe.ToString().ToLowerInvariant();
+        Sprite sprite = Resources.Load<Sprite>(str);
+        if (sprite != null)
+        {
+            return sprite;
+        }
+        return null;
+    }
 
     public class TribeInfo
     {
@@ -187,5 +276,7 @@ public class TribeManager
         public Sprite icon;
         public bool tribeChoice;
         public Texture2D cardback;
+        public string rulebookName;
+        public string rulebookDescription;
     }
 }
