@@ -14,6 +14,8 @@ public class TribePage : RuleBookPage
 
     public override void FillPage(string headerText, params object[] otherArgs)
     {
+        InscryptionAPIPlugin.Logger.LogInfo("[TribePage.FillPage] " + headerText + " " + otherArgs);
+        InscryptionAPIPlugin.Logger.LogInfo("[TribePage.FillPage] " + headerText + " " + otherArgs.Length);
         base.FillPage(headerText, otherArgs);
 
         TribeManager.TribeInfo tribeInfo = null;
@@ -25,11 +27,14 @@ public class TribePage : RuleBookPage
                 break;
             }
         }
+
+        iconRenderer.transform.localPosition = new Vector3(0, 0.8f, 0);
+        iconRenderer.transform.localScale = new Vector3(0.75f, 0.75f, 0.75f);
+        iconRenderer.sprite = tribeInfo.icon;
+        nameTextMesh.text = Localization.Translate(tribeInfo.rulebookName);
         
-        this.iconRenderer.sprite = tribeInfo.icon;
-        this.nameTextMesh.text = Localization.Translate(tribeInfo.rulebookName);
         string text = RuleBookPage.ParseCardDefinition(tribeInfo.rulebookDescription);
-        string englishText = string.Format(Localization.Translate("To the user: {0}"), text);
-        this.descriptionTextMesh.text = Localization.Translate(englishText);
+        string englishText = string.Format(Localization.Translate("Flavour: {0}"), text);
+        descriptionTextMesh.text = Localization.Translate(englishText);
     }
 }

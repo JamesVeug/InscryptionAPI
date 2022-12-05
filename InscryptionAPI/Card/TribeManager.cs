@@ -149,7 +149,6 @@ public class TribeManager
             return;
         }
 
-        // TODO: Custom rangePrefab
         GameObject rangePrefab = __instance.pageRanges.Find((a) => a.type == PageRangeType.Items).rangePrefab;
         GameObject tribePrefab = GameObject.Instantiate(rangePrefab, rangePrefab.transform.parent);
         ItemPage itemPage = tribePrefab.GetComponent<ItemPage>();
@@ -158,10 +157,6 @@ public class TribeManager
         tribePage.nameTextMesh = itemPage.nameTextMesh;
         tribePage.descriptionTextMesh = itemPage.descriptionTextMesh;
         UnityObject.Destroy(itemPage);
-
-        List<Tribe> baseTribes = Enum.GetValues(typeof(Tribe)).Cast<Tribe>().ToList();
-        baseTribes.Remove(Tribe.None);
-        baseTribes.Remove(Tribe.NUM_TRIBES);
         
         foreach (TribeInfo tribe in allTribes)
         {

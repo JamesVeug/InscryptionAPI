@@ -46,35 +46,27 @@ public static class RuleBookManager
             
             // ===
             List<CodeInstruction> codes = new List<CodeInstruction>(instructions);
-            foreach (CodeInstruction code in codes)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo(code.opcode + " " + code.operand);
-                /*foreach (Label codeLabel in code.labels)
-                {
-                    InscryptionAPIPlugin.Logger.LogInfo("\t" + codeLabel);
-                }*/
-            }
 
-            MethodInfo ProcessedCustomPageInfo =  SymbolExtensions.GetMethodInfo(() => ProcessedCustomPage(null));
+            MethodInfo ProcessedCustomPageInfo =  SymbolExtensions.GetMethodInfo(() => ProcessedCustomPage(null, null));
 
             for (int i = 0; i < codes.Count - 1; i++)
             {
                 CodeInstruction codeInstruction = codes[i];
-                if (codeInstruction.opcode == OpCodes.Brfalse_S)
+                if (codeInstruction.opcode == OpCodes.Brfalse)
                 {
                     for (int j = i+1; j < codes.Count; j++)
                     {
                         CodeInstruction innerCodeInstruction = codes[j];
                         if (innerCodeInstruction.opcode == OpCodes.Ret)
                         {
-                            codes.InsertRange(j + 1, new List<CodeInstruction>()
+                            codes.InsertRange(j + 2, new List<CodeInstruction>()
                             {
-                                new CodeInstruction(OpCodes.Ldloc_0), // Component
+                                new CodeInstruction(OpCodes.Ldarg_1), // pageInfo
                                 new CodeInstruction(OpCodes.Callvirt, ProcessedCustomPageInfo), // Process custom page
-                                new CodeInstruction(OpCodes.Brfalse_S, codeInstruction.operand), // Continue if normal if ProcessedCustomPageInfo returned false 
+                                new CodeInstruction(OpCodes.Brfalse, codeInstruction.operand), // Continue if normal if ProcessedCustomPageInfo returned false 
                                 new CodeInstruction(OpCodes.Ret), // Stop method if ProcessedCustomPageInfo returned true
+                                new CodeInstruction(OpCodes.Ldloc_0), // component
                             });
-                            InscryptionAPIPlugin.Logger.LogInfo("Injected custom page");
                             break;
                         }
                     }
@@ -85,9 +77,9 @@ public static class RuleBookManager
             return codes;
         }
 
-        private static bool ProcessedCustomPage(RuleBookPage component)
+        private static bool ProcessedCustomPage(RuleBookPage component, RuleBookPageInfo pageInfo)
         {
-            if (component is StatIconPage)
+            if (component is TribePage)
             {
                 component.FillPage(pageInfo.headerText, new object[]
                 {
