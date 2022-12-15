@@ -76,7 +76,7 @@ Fixes a number of bugs caused by the Sentry ability being used in Act 1.
 Inscryption API 2.0 tries to have you use the original game's objects as much as possible. For example, there are no more 'NewCard' and 'CustomCard' objects; instead, you are responsible to create CardInfo objects yourself and add them.
 The API does provide a number of helper methods to make this process simpler for you.
 
-For more information, please check out the wiki: https://github.com/ScottWilson0903/InscryptionAPI/wiki
+For more information, please check out the wiki: https://inscryptionmodding.github.io/InscryptionAPI/wiki/
 
 ## Contribution
 
