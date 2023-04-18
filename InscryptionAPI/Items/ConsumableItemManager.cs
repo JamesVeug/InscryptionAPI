@@ -54,6 +54,17 @@ public static class ConsumableItemManager
     {
         public static bool Prefix(ItemSlot __instance, ItemData data, bool skipDropAnimation)
         {
+            if (data == null)
+            {
+                InscryptionAPIPlugin.Logger.LogError($"Failed create item. ItemData is null!");
+                return false;
+            }
+            if (__instance == null)
+            {
+                InscryptionAPIPlugin.Logger.LogError($"Failed create item. Item slot not specified for item using prefab id '{data.PrefabId}' ItemData is null!");
+                return false;
+            }
+            
             if (__instance.Item != null)
             {
                 UnityObject.Destroy(__instance.Item.gameObject);
@@ -63,16 +74,21 @@ public static class ConsumableItemManager
             GameObject gameObject = null;
             if (prefabIDToResourceLookup.TryGetValue(prefabId.ToLowerInvariant(), out ConsumableItemResource resource) && data is ConsumableItemData consumableItemData)
             {
+                // Custom Item Model
+                if (resource == null)
+                {
+                    InscryptionAPIPlugin.Logger.LogError($"Failed create item. Resource is null. Check the prefab, gameobject, path for the item prefab!");
+                    return false;
+                }
+                
                 GameObject prefab = resource.Get<GameObject>();
                 if (prefab == null)
                 {
                     InscryptionAPIPlugin.Logger.LogError($"Failed to get {consumableItemData.rulebookName} model from ConsumableItemAssetGetter " + resource);
+                    return false;
                 }
-                else
-                {
-                    gameObject = UnityObject.Instantiate<GameObject>(prefab, __instance.transform);
-                }
-
+                
+                gameObject = UnityObject.Instantiate(prefab, __instance.transform);
                 if (resource.PreSetupCallback != null)
                 {
                     resource.PreSetupCallback(gameObject, consumableItemData);
@@ -81,10 +97,12 @@ public static class ConsumableItemManager
             }
             else
             {
-                gameObject = UnityObject.Instantiate<GameObject>(ResourceBank.Get<GameObject>(prefabId), __instance.transform);
+                // Vanilla item model
+                gameObject = UnityObject.Instantiate(ResourceBank.Get<GameObject>(prefabId), __instance.transform);
                 if (gameObject == null)
                 {
-                    InscryptionAPIPlugin.Logger.LogError($"Failed to get {data.name} model from ResourceBank " + prefabId);
+                    InscryptionAPIPlugin.Logger.LogError($"Failed to create itm. Could not get prefab for item {data.name} from ResourceBank using prefabID " + prefabId);
+                    return false;
                 }
             }
 
@@ -94,7 +112,13 @@ public static class ConsumableItemManager
             }
 
             gameObject.transform.localPosition = Vector3.zero;
-            __instance.Item = gameObject.GetComponent<Item>();
+
+            if (!gameObject.TryGetComponent(out Item item))
+            {
+                InscryptionAPIPlugin.Logger.LogError($"Warning. Item {data.name} with prefab id '{prefabId}' does not have an Item component!");
+                item = gameObject.AddComponent<Item>();
+            }
+            __instance.Item = item;
             __instance.Item.SetData(data);
             if (skipDropAnimation)
             {
@@ -117,8 +141,12 @@ public static class ConsumableItemManager
                     }
                     else
                     {
-                        InscryptionAPIPlugin.Logger.LogError("Could not get card for bottled card item: " + cardWithinBottle);
+                        InscryptionAPIPlugin.Logger.LogWarning($"Could not get card {cardWithinBottle} for bottled card item: {consumableItemData2.rulebookName}");
                     }
+                }
+                else
+                {
+                    InscryptionAPIPlugin.Logger.LogWarning($"No card found for card in a bottle {consumableItemData2.rulebookName}");
                 }
             }
 
@@ -374,12 +402,12 @@ public static class ConsumableItemManager
                     }
                     else
                     {
-                        InscryptionAPIPlugin.Logger.LogError($"Could not find Renderer on Icon GameObject to assign tribe icon!");
+                        InscryptionAPIPlugin.Logger.LogError($"Could not find Renderer on the GameObject named Icon for item {data.rulebookName} to assign item icon!");
                     }
                 }
                 else
                 {
-                    InscryptionAPIPlugin.Logger.LogError($"Could not find Icon GameObject to assign tribe icon!");
+                    InscryptionAPIPlugin.Logger.LogError($"Could not find a GameObject named 'Icon' for item {data.rulebookName} to assign the item icon!");
                 }
             }
             else
@@ -399,7 +427,7 @@ public static class ConsumableItemManager
             }
             else
             {
-                InscryptionAPIPlugin.Logger.LogError($"Could not add Animator. Missing a child game object!. Make sure you have a GameObject called Anim!");
+                InscryptionAPIPlugin.Logger.LogError($"Could not add Animator to item {data.rulebookName}. Missing a child game object!. Make sure you have a GameObject called Anim!");
             }
         }
         if (animator != null && animator.runtimeAnimatorController == null)
@@ -415,7 +443,7 @@ public static class ConsumableItemManager
             consumableItem = prefab.AddComponent(itemType) as ConsumableItem;
             if (consumableItem == null)
             {
-                InscryptionAPIPlugin.Logger.LogError($"Type given is not a ConsumableItem! You may encounter unexpected bugs");
+                InscryptionAPIPlugin.Logger.LogError($"Type given for item {data.rulebookName} is not a ConsumableItem! You may encounter unexpected bugs");
             }
         }
 
