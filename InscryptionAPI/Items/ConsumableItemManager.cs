@@ -59,6 +59,10 @@ public static class ConsumableItemManager
                 InscryptionAPIPlugin.Logger.LogError($"Failed create item. ItemData is null!");
                 return false;
             }
+            if (data is not ConsumableItemData consumableItemData)
+            {
+                return true;
+            }
             if (__instance == null)
             {
                 InscryptionAPIPlugin.Logger.LogError($"Failed create item. Item slot not specified for item using prefab id '{data.PrefabId}' ItemData is null!");
@@ -72,19 +76,19 @@ public static class ConsumableItemManager
 
             string prefabId = "Prefabs/Items/" + data.PrefabId;
             GameObject gameObject = null;
-            if (prefabIDToResourceLookup.TryGetValue(prefabId.ToLowerInvariant(), out ConsumableItemResource resource) && data is ConsumableItemData consumableItemData)
+            if (prefabIDToResourceLookup.TryGetValue(prefabId.ToLowerInvariant(), out ConsumableItemResource resource))
             {
                 // Custom Item Model
                 if (resource == null)
                 {
-                    InscryptionAPIPlugin.Logger.LogError($"Failed create item. Resource is null. Check the prefab, gameobject, path for the item prefab!");
+                    InscryptionAPIPlugin.Logger.LogError($"Failed create item. Resource is null. Check the prefab, GameObject, path for the item prefab!");
                     return false;
                 }
                 
                 GameObject prefab = resource.Get<GameObject>();
                 if (prefab == null)
                 {
-                    InscryptionAPIPlugin.Logger.LogError($"Failed to get {consumableItemData.rulebookName} model from ConsumableItemAssetGetter " + resource);
+                    InscryptionAPIPlugin.Logger.LogError($"Failed to get {consumableItemData.rulebookName} model from resource {resource}");
                     return false;
                 }
                 
@@ -98,7 +102,14 @@ public static class ConsumableItemManager
             else
             {
                 // Vanilla item model
-                gameObject = UnityObject.Instantiate(ResourceBank.Get<GameObject>(prefabId), __instance.transform);
+                GameObject prefab = ResourceBank.Get<GameObject>(prefabId);
+                if (prefab == null)
+                {
+                    InscryptionAPIPlugin.Logger.LogError($"Failed to get {data.name} model from ResourceBank {prefabId}");
+                    return false;
+                }
+                
+                gameObject = UnityObject.Instantiate(prefab, __instance.transform);
                 if (gameObject == null)
                 {
                     InscryptionAPIPlugin.Logger.LogError($"Failed to create itm. Could not get prefab for item {data.name} from ResourceBank using prefabID " + prefabId);
@@ -116,7 +127,7 @@ public static class ConsumableItemManager
             if (!gameObject.TryGetComponent(out Item item))
             {
                 InscryptionAPIPlugin.Logger.LogError($"Warning. Item {data.name} with prefab id '{prefabId}' does not have an Item component!");
-                item = gameObject.AddComponent<Item>();
+                item = gameObject.AddComponent<ConsumableItem>();
             }
             __instance.Item = item;
             __instance.Item.SetData(data);
@@ -127,9 +138,9 @@ public static class ConsumableItemManager
 
 
             // Setup cards
-            if (__instance.Item is CardBottleItem cardBottleItem && data is ConsumableItemData consumableItemData2)
+            if (__instance.Item is CardBottleItem cardBottleItem)
             {
-                string cardWithinBottle = consumableItemData2.GetCardWithinBottle();
+                string cardWithinBottle = consumableItemData.GetCardWithinBottle();
                 if (!string.IsNullOrEmpty(cardWithinBottle))
                 {
                     CardInfo cardInfo = CardLoader.GetCardByName(cardWithinBottle);
@@ -141,12 +152,12 @@ public static class ConsumableItemManager
                     }
                     else
                     {
-                        InscryptionAPIPlugin.Logger.LogWarning($"Could not get card {cardWithinBottle} for bottled card item: {consumableItemData2.rulebookName}");
+                        InscryptionAPIPlugin.Logger.LogWarning($"Could not get card {cardWithinBottle} for bottled card item: {consumableItemData.rulebookName}");
                     }
                 }
                 else
                 {
-                    InscryptionAPIPlugin.Logger.LogWarning($"No card found for card in a bottle {consumableItemData2.rulebookName}");
+                    InscryptionAPIPlugin.Logger.LogWarning($"No card found for card in a bottle {consumableItemData.rulebookName}");
                 }
             }
 

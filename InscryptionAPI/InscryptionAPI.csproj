@@ -29,6 +29,8 @@
         <EmbeddedResource Include="tribeicon_none.png" />
         <None Remove="maskFlat" />
         <EmbeddedResource Include="maskFlat" />
+        <None Remove="customtotembottom" />
+        <EmbeddedResource Include="customtotembottom" />
     </ItemGroup>
     
     <ItemGroup>
