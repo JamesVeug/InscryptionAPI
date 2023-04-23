@@ -16,38 +16,40 @@ public static class TotemManager
         AllTribes
     }
 
-    public static CustomTotemBottom NewBottomPiece<T>(string name, string guid, GameObject prefab) where T : TotemTriggerReceiver
+    public static CustomTotemBottom NewBottomPiece<T>(string guid, string rulebookName, string rulebookDescription, GameObject prefab) where T : TotemTriggerReceiver
     {
         if (prefab == null)
         {
-            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{name}. Prefab is null!");
+            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{rulebookName}. Prefab is null!");
             return null;
         }
 
-        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, name);
+        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, rulebookName);
         return Add(new CustomTotemBottom()
         {
             EffectID = id,
-            Name = name,
+            RulebookName = rulebookName,
+            RulebookDescription = rulebookDescription,
             GUID = guid,
             Prefab = prefab,
             TriggerReceiver = typeof(T)
         });
     }
 
-    public static CustomTotemBottom NewBottomPiece<T>(string name, string guid, Texture icon) where T : TotemTriggerReceiver
+    public static CustomTotemBottom NewBottomPiece<T>(string guid, string rulebookName, string rulebookDescription, Texture icon) where T : TotemTriggerReceiver
     {
         if (icon == null)
         {
-            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{name}. Texture is null!");
+            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{rulebookName}. Texture is null!");
             return null;
         }
 
-        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, name);
+        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, rulebookName);
         return Add(new CustomTotemBottom()
         {
             EffectID = id,
-            Name = name,
+            RulebookName = rulebookName,
+            RulebookDescription = rulebookDescription,
             GUID = guid,
             Icon = icon,
             Prefab = DefaultTotemBottom,
@@ -67,7 +69,7 @@ public static class TotemManager
         return Add(new CustomTotemBottom()
         {
             EffectID = id,
-            Name = name,
+            RulebookName = name,
             GUID = guid,
             Icon = icon,
             Prefab = DefaultTotemBottom,
@@ -248,11 +250,11 @@ public static class TotemManager
         // Add all totem bottoms to the game
         foreach (CustomTotemBottom totem in totemBottoms)
         {
-            InscryptionAPIPlugin.Logger.LogError($"Adding {totem.Name} {totem.EffectID}");
+            InscryptionAPIPlugin.Logger.LogError($"Adding {totem.RulebookName} {totem.EffectID}");
             GameObject prefab = totem.Prefab;
             if (prefab == null)
             {
-                InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {totem.GUID}.{totem.Name}. Prefab is null!");
+                InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {totem.GUID}.{totem.RulebookName}. Prefab is null!");
                 continue;
             }
             
@@ -357,9 +359,10 @@ public static class TotemManager
 
     public class CustomTotemBottom
     {
-        public TotemEffect EffectID;
-        public string Name;
         public string GUID;
+        public string RulebookName;
+        public string RulebookDescription;
+        public TotemEffect EffectID;
         public GameObject Prefab;
         public Texture Icon;
         public Type CompositeType = typeof(CustomIconTotemBottomPiece);
