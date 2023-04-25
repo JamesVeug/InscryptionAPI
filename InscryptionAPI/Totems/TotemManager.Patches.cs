@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Linq.Expressions;
+using System.Reflection;
 using System.Reflection.Emit;
 using DiskCardGame;
 using HarmonyLib;
@@ -658,6 +659,9 @@ internal static class BuildTotemSequencer_BuildPhase
         MethodInfo LogB = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogB));
         MethodInfo LogState = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogState));
         MethodInfo LogReturn = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogReturn));
+        MethodInfo LogBreak = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogBreak));
+        MethodInfo LogBreaks = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogBreakS));
+        MethodInfo LogLeave = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogBreakS));
         
         
         MethodInfo OverrideTotemDefinition = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.CreateCustomTotemDefinition));
@@ -676,6 +680,40 @@ internal static class BuildTotemSequencer_BuildPhase
             {
                 codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogState));
             }
+            if (codes[i].opcode == OpCodes.Ret)
+            {
+                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found Return");
+                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogReturn));
+            }
+            if (codes[i].operand == SetInventorySlotsSelectable)
+            {
+                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found SetInventorySlotsSelectable");
+                codes.Insert(++i, new CodeInstruction(OpCodes.Call, LogA));
+            }
+            if (!foundAutoAssemble && codes[i].operand == AutoAssembleTotem)
+            {
+                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found AutoAssembleTotem");
+                codes.Insert(++i, new CodeInstruction(OpCodes.Call, LogA));
+                foundAutoAssemble = true;
+            }
+            if (codes[i].opcode == OpCodes.Br)
+            {
+                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found BR");
+                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogBreak));
+                foundAutoAssemble = true;
+            }
+            if (codes[i].opcode == OpCodes.Br_S)
+            {
+                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found BRs");
+                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogBreaks));
+                foundAutoAssemble = true;
+            }
+            if (codes[i].opcode == OpCodes.Leave)
+            {
+                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found Leave");
+                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogLeave));
+                foundAutoAssemble = true;
+            }
             
             if (codes[i].operand == AddMethod)
             {
@@ -684,22 +722,21 @@ internal static class BuildTotemSequencer_BuildPhase
                 codes.Insert(i++, new CodeInstruction(OpCodes.Ldfld, TotemData));
                 codes.Insert(i++, new CodeInstruction(OpCodes.Call, OverrideTotemDefinition));
             }
-            else if (codes[i].operand == SetInventorySlotsSelectable)
+        }
+
+
+        for (int i = 0; i < codes.Count; i+=2)
+        {
+            int x = i;
+            LambdaExpression lambdaExpression = Expression.Call() new Expression<void>()
+            Action methodInfo = new Action(() =>
             {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found SetInventorySlotsSelectable");
-                codes.Insert(++i, new CodeInstruction(OpCodes.Call, LogA));
-            }
-            else if (codes[i].opcode == OpCodes.Ret)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found Return");
-                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogReturn));
-            }
-            else if (!foundAutoAssemble && codes[i].operand == AutoAssembleTotem)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found AutoAssembleTotem");
-                codes.Insert(++i, new CodeInstruction(OpCodes.Call, LogA));
-                foundAutoAssemble = true;
-            }
+                
+                int j = x;
+                InscryptionAPIPlugin.Logger.LogInfo($"[Line] " + j);
+            });
+            
+            codes.Insert(i, new CodeInstruction(OpCodes.Callvirt, methodInfo));
         }
         
         /*InscryptionAPIPlugin.Logger.LogInfo($"DONEZ");
@@ -734,6 +771,23 @@ internal static class BuildTotemSequencer_BuildPhase
     {
         InscryptionAPIPlugin.Logger.LogInfo($"[AutoAssemble] " + a);
         return a;
+    }
+    
+    internal static void LogBreak()
+    {
+        InscryptionAPIPlugin.Logger.LogInfo($"[AutoAssemble] Br");
+    }
+
+    
+    internal static void LogBreakS()
+    {
+        InscryptionAPIPlugin.Logger.LogInfo($"[AutoAssemble] Br.s");
+    }
+
+    
+    internal static void LogLeave()
+    {
+        InscryptionAPIPlugin.Logger.LogInfo($"[AutoAssemble] Leave");
     }
     
     internal static int LogState(int state)

@@ -12,6 +12,7 @@ using InscryptionAPI.Items;
 using InscryptionAPI.Regions;
 using InscryptionAPI.Totems;
 using System.Runtime.CompilerServices;
+using HarmonyLib.Tools;
 
 [assembly: InternalsVisibleTo("Assembly-CSharp")]
 [assembly: InternalsVisibleTo("Assembly-CSharp.APIPatcher.mm")]
@@ -45,7 +46,7 @@ public class InscryptionAPIPlugin : BaseUnityPlugin
 
     new internal static ManualLogSource Logger;
 
-    private readonly Harmony HarmonyInstance = new(ModGUID);
+    private Harmony HarmonyInstance;
 
     public static event Action<Type> ScriptableObjectLoaderLoad;
     internal static void InvokeSOLEvent(Type type)
@@ -57,7 +58,12 @@ public class InscryptionAPIPlugin : BaseUnityPlugin
     {
         Logger = base.Logger;
 
+        Environment.SetEnvironmentVariable("HARMONY_DEBUG","1");
+        Harmony.DEBUG = true; 
+        HarmonyFileLog.Enabled = true; 
+        HarmonyInstance = new(ModGUID);
         HarmonyInstance.PatchAll(typeof(InscryptionAPIPlugin).Assembly);
+        HarmonyLib.FileLog.Log("Hello");
     }
 
     private void OnDisable()
