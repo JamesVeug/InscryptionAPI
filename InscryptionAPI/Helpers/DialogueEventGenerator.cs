@@ -1,8 +1,14 @@
+using InscryptionAPI.Dialogue;
+using InscryptionAPI.Guid;
+using System.Reflection;
+
 namespace InscryptionAPI.Helpers;
 
+[Obsolete("Use DialogueManager instead")]
 public static class DialogueEventGenerator
 {
-    public static DialogueEvent GenerateEvent(string name, List<CustomLine> mainLines, List<List<CustomLine>> repeatLines = null, DialogueEvent.MaxRepeatsBehaviour afterMaxRepeats = 
+    [Obsolete("Use DialogueManager.GenerateEvent instead")]
+    public static DialogueEvent GenerateEvent(string name, List<CustomLine> mainLines, List<List<CustomLine>> repeatLines = null, DialogueEvent.MaxRepeatsBehaviour afterMaxRepeats =
         DialogueEvent.MaxRepeatsBehaviour.RandomDefinedRepeat, DialogueEvent.Speaker defaultSpeaker = DialogueEvent.Speaker.Single)
     {
         DialogueEvent ev = new();
@@ -12,7 +18,9 @@ public static class DialogueEventGenerator
         ev.repeatLines = repeatLines != null ? repeatLines.ConvertAll((x) => new DialogueEvent.LineSet(x.ConvertAll((x2) => x2.ToLine(speakers, defaultSpeaker)))) : new();
         ev.maxRepeatsBehaviour = afterMaxRepeats;
         ev.speakers = new(speakers);
-        DialogueDataUtil.Data?.events?.Add(ev);
+
+        string pluginGUID = TypeManager.GetModIdFromCallstack(Assembly.GetCallingAssembly());
+        DialogueManager.Add(pluginGUID, ev);
         return ev;
     }
 }

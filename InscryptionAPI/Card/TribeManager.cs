@@ -1,13 +1,11 @@
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Reflection;
 using DiskCardGame;
-using UnityEngine;
 using HarmonyLib;
 using InscryptionAPI.Guid;
 using InscryptionAPI.Helpers;
 using InscryptionAPI.Rulebook;
+using System.Collections.ObjectModel;
+using System.Reflection;
+using UnityEngine;
 
 namespace InscryptionAPI.Card;
 
@@ -106,6 +104,7 @@ public class TribeManager
     [HarmonyPrefix]
     private static bool GenerateTribeChoices(ref List<CardChoice> __result, int randomSeed)
     {
+        // create list of chooseable vanilla tribes then add all chooseable custom tribes
         List<Tribe> list = new()
         {
             Tribe.Bird,
@@ -114,20 +113,28 @@ public class TribeManager
             Tribe.Insect,
             Tribe.Reptile
         };
-        list.AddRange(TribeManager.newTribes.FindAll((x) => x != null && x.tribeChoice).ConvertAll((x) => x.tribe));
+        list.AddRange(TribeManager.tribes.FindAll((x) => x != null && x.tribeChoice).ConvertAll((x) => x.tribe));
+        // create a list of this region's dominant tribes
         List<Tribe> tribes = new(RunState.CurrentMapRegion.dominantTribes);
-        tribes.RemoveAll(x => TribeManager.newTribes.Exists(x2 => x2.tribe == x) && !TribeManager.newTribes.Find(x2 => x2.tribe == x).tribeChoice);
-        list.RemoveAll((Tribe x) => tribes.Contains(x));
+        // get a list of cards obtainable at choice nodes
+        List<CardInfo> obtainableCards = CardManager.AllCardsCopy.FindAll(c => c.HasCardMetaCategory(CardMetaCategory.ChoiceNode));
+        // remove all non-chooseable tribes and all tribes with no cards
+        tribes.RemoveAll(t => (TribeManager.tribes.Exists(ct => ct.tribe == t && !ct.tribeChoice)) || !obtainableCards.Exists(c => c.IsOfTribe(t)));
+        list.RemoveAll(t => tribes.Contains(t) || !obtainableCards.Exists(c => c.IsOfTribe(t)));
+        // if list is empty, add Insect as a fallback
+        if (list.Count == 0)
+            list.Add(Tribe.Insect);
+
         while (tribes.Count < 3)
         {
             Tribe item = list[SeededRandom.Range(0, list.Count, randomSeed++)];
             tribes.Add(item);
-            list.Remove(item);
+            if (list.Count > 1) // prevents softlock
+                list.Remove(item);
         }
-        while (tribes.Count > 3)
-        {
+        while (tribes.Count > 3) // if there are more than 3 tribes, reduce it to 3
             tribes.RemoveAt(SeededRandom.Range(0, tribes.Count, randomSeed++));
-        }
+
         List<CardChoice> list2 = new List<CardChoice>();
         foreach (Tribe tribe in tribes.Randomize())
         {
@@ -224,8 +231,8 @@ public class TribeManager
         }
         return null;
     }
-    
-    public static Texture2D GetTribeIcon(Tribe tribe, bool useMissingIconIfNull=true)
+
+    public static Texture2D GetTribeIcon(Tribe tribe, bool useMissingIconIfNull = true)
     {
         Texture2D texture2D = null;
         if (IsCustomTribe(tribe))
@@ -247,8 +254,8 @@ public class TribeManager
             // Vanilla tribe icon
             texture2D = GetBaseTribeIcon(tribe).texture;
         }
-        
-        if(texture2D == null && useMissingIconIfNull)
+
+        if (texture2D == null && useMissingIconIfNull)
         {
             texture2D = TribeIconMissing;
         }

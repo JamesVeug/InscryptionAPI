@@ -1,7 +1,7 @@
-using System.Collections;
 using DiskCardGame;
 using HarmonyLib;
 using Pixelplacement;
+using System.Collections;
 using UnityEngine;
 
 namespace InscryptionCommunityPatch.Card;
@@ -67,124 +67,131 @@ public class Act1LatchAbilityFix
     [HarmonyPostfix, HarmonyPatch(typeof(Latch), nameof(Latch.OnPreDeathAnimation))]
     private static IEnumerator Postfix(IEnumerator enumerator, Latch __state, bool wasSacrifice)
     {
-        // if this isn't Act 1 or Grimora/Magnificus, return the default logic (Act 3)
-        if (SceneLoader.ActiveSceneName != "Part1_Cabin" && !SceneLoader.ActiveSceneName.StartsWith("finale"))
+        // return default logic for Part 3
+        if (SaveManager.SaveFile.IsPart3)
         {
             yield return enumerator;
             yield break;
         }
 
-        PatchPlugin.Logger.LogInfo($"[LatchFix] Started death, latch name: [{__state.name}]");
-
         List<CardSlot> validTargets = BoardManager.Instance.AllSlotsCopy;
         validTargets.RemoveAll(slot => slot.Card == null || slot.Card.Dead || __state.CardHasLatchMod(slot.Card) || slot.Card == __state.Card);
 
-        PatchPlugin.Logger.LogInfo("[LatchFix] Count of Valid Targets : " + validTargets.Count);
-
-        if (validTargets.Count > 0)
+        if (PatchPlugin.configFullDebug.Value)
         {
-            ViewManager.Instance.SwitchToView(View.Board);
-            __state.Card.Anim.PlayHitAnimation();
+            PatchPlugin.Logger.LogDebug($"[LatchFix] Started death, latch name: [{__state.name}]");
+            PatchPlugin.Logger.LogDebug("[LatchFix] Count of Valid Targets : " + validTargets.Count);
+        }
 
-            yield return new WaitForSeconds(0.1f);
+        // break if no valid targets
+        if (validTargets.Count == 0)
+            yield break;
 
-            CardAnimationController anim = __state.Card.Anim;
+        ViewManager.Instance.SwitchToView(View.Board);
+        __state.Card.Anim.PlayHitAnimation();
 
-            GameObject latchParentGameObject = new GameObject
-            {
-                name = "LatchParent",
-                transform =
+        yield return new WaitForSeconds(0.1f);
+
+        CardAnimationController anim = __state.Card.Anim;
+
+        GameObject latchParentGameObject = new GameObject
+        {
+            name = "LatchParent",
+            transform =
                 {
                     position = anim.transform.position
                 }
-            };
-            latchParentGameObject.transform.SetParent(anim.transform);
+        };
+        latchParentGameObject.transform.SetParent(anim.transform);
 
-            Transform latchParent = latchParentGameObject.transform;
-            GameObject claw = UnityObject.Instantiate(ClawPrefab, latchParent);
-            Material cannonMat = null;
-            try
+        Transform latchParent = latchParentGameObject.transform;
+        GameObject claw = UnityObject.Instantiate(ClawPrefab, latchParent);
+        Material cannonMat = null;
+        try
+        {
+            cannonMat = new Material(ResourceBank.Get<GameObject>("Prefabs/Cards/SpecificCardModels/CannonTargetIcon").GetComponentInChildren<Renderer>().material);
+        }
+        catch { }
+        if (cannonMat != null)
+        {
+            Renderer[] renderers = claw.GetComponentsInChildren<Renderer>();
+            foreach (Renderer rend in renderers.Where(rend => rend))
             {
-                cannonMat = new Material(ResourceBank.Get<GameObject>("Prefabs/Cards/SpecificCardModels/CannonTargetIcon").GetComponentInChildren<Renderer>().material);
+                rend.material = cannonMat;
             }
-            catch { }
-            if (cannonMat != null)
-            {
-                Renderer[] renderers = claw.GetComponentsInChildren<Renderer>();
-                foreach (Renderer rend in renderers.Where(rend => rend))
-                {
-                    rend.material = cannonMat;
-                }
-            }
+        }
 
-            CardSlot selectedSlot = null;
+        CardSlot selectedSlot = null;
 
-            if (__state.Card.OpponentCard)
-            {
-                yield return new WaitForSeconds(0.3f);
-                yield return __state.AISelectTarget(validTargets, s => selectedSlot = s);
-
-                if (selectedSlot != null && selectedSlot.Card != null)
-                {
-                    AimWeaponAnim(latchParent.gameObject, selectedSlot.transform.position);
-                    yield return new WaitForSeconds(0.3f);
-                }
-            }
-            else
-            {
-                List<CardSlot> allSlotsCopy = BoardManager.Instance.AllSlotsCopy;
-                allSlotsCopy.Remove(__state.Card.Slot);
-
-                yield return BoardManager.Instance.ChooseTarget(allSlotsCopy, validTargets,
-                    s => selectedSlot = s, // target selected callback
-                    __state.OnInvalidTarget, // invalid target callback
-                    s => // slot cursor enter callback
-                    {
-                        if (s.Card == null)
-                            return;
-
-                        AimWeaponAnim(latchParent.gameObject, s.transform.position);
-                    },
-                    null, // cancel condition
-                    CursorType.Target);
-            }
-
-            claw.SetActive(true);
-
-            CustomCoroutine.FlickerSequence(
-                () => claw.SetActive(true),
-                () => claw.SetActive(false),
-                true, 
-                false, 
-                0.05f, 
-                2
-            );
+        if (__state.Card.OpponentCard)
+        {
+            yield return new WaitForSeconds(0.3f);
+            yield return __state.AISelectTarget(validTargets, s => selectedSlot = s);
 
             if (selectedSlot != null && selectedSlot.Card != null)
             {
-                CardModificationInfo mod = new CardModificationInfo(__state.LatchAbility)
-                {
-                    fromCardMerge = true,
-                    fromLatch = true
-                };
-                PatchPlugin.Logger.LogInfo($"[LatchFix] Selected card name [{selectedSlot.Card.name}]");
-
-                if (selectedSlot.Card.Info.name == "!DEATHCARD_BASE")
-                {
-                    selectedSlot.Card.AddTemporaryMod(mod);
-                }
-                else
-                {
-                    CardInfo info = selectedSlot.Card.Info.Clone() as CardInfo;
-                    info.Mods.Add(mod);
-                    selectedSlot.Card.SetInfo(info);
-                }
-                selectedSlot.Card.Anim.PlayTransformAnimation();
-                __state.OnSuccessfullyLatched(selectedSlot.Card);
-
-                yield return new WaitForSeconds(0.75f);
-                yield return __state.LearnAbility();
+                AimWeaponAnim(latchParent.gameObject, selectedSlot.transform.position);
+                yield return new WaitForSeconds(0.3f);
             }
+        }
+        else
+        {
+            List<CardSlot> allSlotsCopy = BoardManager.Instance.AllSlotsCopy;
+            allSlotsCopy.Remove(__state.Card.Slot);
+
+            yield return BoardManager.Instance.ChooseTarget(allSlotsCopy, validTargets,
+                s => selectedSlot = s, // target selected callback
+                __state.OnInvalidTarget, // invalid target callback
+                s => // slot cursor enter callback
+                {
+                    if (s.Card == null)
+                        return;
+
+                    AimWeaponAnim(latchParent.gameObject, s.transform.position);
+                },
+                null, // cancel condition
+                CursorType.Target);
+        }
+
+        claw.SetActive(true);
+
+        CustomCoroutine.FlickerSequence(
+            () => claw.SetActive(true),
+            () => claw.SetActive(false),
+            true,
+            false,
+            0.05f,
+            2
+        );
+
+        if (selectedSlot != null && selectedSlot.Card != null)
+        {
+            CardModificationInfo mod = new(__state.LatchAbility)
+            {
+                // these control rendering, so only set to true if said rendering won't butt everything
+                fromCardMerge = SaveManager.SaveFile.IsPart1,
+                fromLatch = SaveManager.SaveFile.IsPart1 || SaveManager.SaveFile.IsPart3
+            };
+
+            if (PatchPlugin.configFullDebug.Value)
+                PatchPlugin.Logger.LogDebug($"[LatchFix] Selected card name [{selectedSlot.Card.name}]");
+
+            if (selectedSlot.Card.Info.name == "!DEATHCARD_BASE")
+            {
+                selectedSlot.Card.AddTemporaryMod(mod);
+            }
+            else
+            {
+                CardInfo info = selectedSlot.Card.Info.Clone() as CardInfo;
+                info.Mods = new(selectedSlot.Card.Info.Mods) { mod };
+                selectedSlot.Card.SetInfo(info);
+            }
+
+            selectedSlot.Card.Anim.PlayTransformAnimation();
+            __state.OnSuccessfullyLatched(selectedSlot.Card);
+
+            yield return new WaitForSeconds(0.75f);
+            yield return __state.LearnAbility();
         }
     }
 }

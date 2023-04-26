@@ -1,9 +1,8 @@
-using System.Collections;
 using DiskCardGame;
-using HarmonyLib;
-using System.Reflection;
-using UnityEngine;
 using GBC;
+using HarmonyLib;
+using System.Collections;
+using UnityEngine;
 
 namespace InscryptionCommunityPatch.Card;
 
@@ -12,13 +11,10 @@ namespace InscryptionCommunityPatch.Card;
 internal class Act2LogSpamFixes
 {
     // For parts of the game that aren't needed in Act 2
+    [HarmonyPrefix]
     [HarmonyPatch(typeof(GameFlowManager), nameof(GameFlowManager.UpdateForTransitionToFirstPerson))]
     [HarmonyPatch(typeof(ViewManager), nameof(ViewManager.UpdateViewControlsHintsForView))]
-    [HarmonyPrefix]
-    private static bool DisableInAct2()
-    {
-        return !SaveManager.SaveFile.IsPart2;
-    }
+    private static bool DisableInAct2() => !SaveManager.SaveFile.IsPart2;
 
     // Since GameFlowManager is null in Act 2, there's no point in checking for that
     [HarmonyPatch(typeof(ConduitCircuitManager), nameof(ConduitCircuitManager.UpdateCircuits))]
@@ -36,10 +32,7 @@ internal class Act2LogSpamFixes
     // Prevents log spam when you open a card pack with an activated sigil in it
     [HarmonyPatch(typeof(PixelActivatedAbilityButton), nameof(PixelActivatedAbilityButton.ManagedUpdate))]
     [HarmonyPrefix]
-    private static bool RemovePixelActivatedSpam()
-    {
-        return SceneLoader.ActiveSceneName == "GBC_CardBattle";
-    }
+    private static bool RemovePixelActivatedSpam() => SceneLoader.ActiveSceneName == "GBC_CardBattle";
 
     [HarmonyPatch(typeof(TurnManager), nameof(TurnManager.SetupPhase))]
     [HarmonyPostfix]
@@ -49,6 +42,7 @@ internal class Act2LogSpamFixes
         if (ConduitCircuitManager.Instance == null)
             BoardManager.Instance.gameObject.AddComponent<ConduitCircuitManager>();
 
+        // if this isn't Act 2, return the default logic
         if (!SaveManager.SaveFile.IsPart2)
         {
             yield return enumerator;
@@ -60,7 +54,7 @@ internal class Act2LogSpamFixes
         Singleton<PlayerHand>.Instance.PlayingLocked = true;
         if (__instance.SpecialSequencer != null)
             yield return __instance.SpecialSequencer.PreBoardSetup();
-        
+
         yield return new WaitForSeconds(0.15f);
         yield return Singleton<LifeManager>.Instance.Initialize(__instance.SpecialSequencer == null || __instance.SpecialSequencer.ShowScalesOnStart);
         __instance.StartCoroutine(Singleton<BoardManager>.Instance.Initialize());
@@ -70,16 +64,16 @@ internal class Act2LogSpamFixes
         __instance.StartCoroutine(__instance.PlacePreSetCards(encounterData));
         if (__instance.SpecialSequencer != null)
             yield return __instance.SpecialSequencer.PreDeckSetup();
-        
+
         Singleton<PlayerHand>.Instance.Initialize();
         yield return Singleton<CardDrawPiles>.Instance.Initialize();
         if (__instance.SpecialSequencer != null)
             yield return __instance.SpecialSequencer.PreHandDraw();
-        
+
         yield return Singleton<CardDrawPiles>.Instance.DrawOpeningHand(__instance.GetFixedHand());
         if (__instance.opponent.QueueFirstCardBeforePlayer)
             yield return __instance.opponent.QueueNewCards(doTween: true, changeView: false);
-        
+
         __instance.IsSetupPhase = false;
         yield break;
     }
@@ -99,22 +93,18 @@ internal class Act2LogSpamFixes
         __instance.GameEnding = true;
 
         if (!__instance.PlayerWon && __instance.opponent != null && __instance.opponent.Blueprint != null)
-        {
             AnalyticsManager.SendFailedEncounterEvent(__instance.opponent.Blueprint, __instance.opponent.Difficulty, __instance.TurnNumber);
-        }
+
         if (__instance.SpecialSequencer != null)
-        {
             yield return __instance.SpecialSequencer.PreCleanUp();
-        }
+
         Singleton<ViewManager>.Instance.Controller.LockState = ViewLockState.Locked;
         if (__instance.PlayerWon && __instance.PostBattleSpecialNode == null)
-        {
             Singleton<ViewManager>.Instance.SwitchToView(View.MapDefault);
-        }
+
         else
-        {
             Singleton<ViewManager>.Instance.SwitchToView(View.Default);
-        }
+
         yield return new WaitForSeconds(0.1f);
         __instance.StartCoroutine(Singleton<PlayerHand>.Instance.CleanUp());
         __instance.StartCoroutine(Singleton<CardDrawPiles>.Instance.CleanUp());
@@ -125,18 +115,12 @@ internal class Act2LogSpamFixes
 
         yield return Singleton<LifeManager>.Instance.CleanUp();
         if (__instance.SpecialSequencer != null)
-        {
             yield return __instance.SpecialSequencer.GameEnd(__instance.PlayerWon);
-        }
 
-        if (__instance.PlayerWon && SaveManager.SaveFile.IsPart3)
-        {
-            Part3SaveData.Data.IncreaseBounty(10);
-        }
-        UnityEngine.Object.Destroy(__instance.opponent.gameObject);
+        UnityObject.Destroy(__instance.opponent.gameObject);
 
         Singleton<PlayerHand>.Instance.SetShown(shown: false);
-        UnityEngine.Object.Destroy(__instance.SpecialSequencer);
+        UnityObject.Destroy(__instance.SpecialSequencer);
         yield break;
     }
 
@@ -162,11 +146,11 @@ internal class Act2LogSpamFixes
         __instance.choosingSlotCard = card;
         if (card != null && card.Anim != null)
             card.Anim.SetSelectedToPlay(selected: true);
-        
+
         Singleton<BoardManager>.Instance.ShowCardNearBoard(card, showNearBoard: true);
         if (Singleton<TurnManager>.Instance.SpecialSequencer != null)
             yield return Singleton<TurnManager>.Instance.SpecialSequencer.CardSelectedFromHand(card);
-        
+
         bool cardWasPlayed = false;
         bool requiresSacrifices = card.Info.BloodCost > 0;
         if (requiresSacrifices)
@@ -186,18 +170,18 @@ internal class Act2LogSpamFixes
                 yield return __instance.PlayCardOnSlot(card, lastSelectedSlot);
                 if (card.Info.BonesCost > 0)
                     yield return Singleton<ResourcesManager>.Instance.SpendBones(card.Info.BonesCost);
-                
+
                 if (card.EnergyCost > 0)
                     yield return Singleton<ResourcesManager>.Instance.SpendEnergy(card.EnergyCost);
             }
         }
         if (!cardWasPlayed)
             Singleton<BoardManager>.Instance.ShowCardNearBoard(card, showNearBoard: false);
-        
+
         __instance.choosingSlotCard = null;
         if (card != null && card.Anim != null)
             card.Anim.SetSelectedToPlay(selected: false);
-        
+
         __instance.CardsInHand.ForEach(delegate (PlayableCard x)
         {
             x.SetEnabled(enabled: true);
@@ -231,7 +215,7 @@ internal class Act2LogSpamFixes
                 __instance.PlayerDamage += damage;
             else
                 __instance.OpponentDamage += damage;
-            
+
             yield return new WaitForSeconds(waitAfter);
         }
         yield break;

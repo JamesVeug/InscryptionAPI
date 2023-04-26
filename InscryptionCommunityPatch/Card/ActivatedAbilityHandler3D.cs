@@ -6,7 +6,7 @@ namespace InscryptionCommunityPatch.Card;
 public class ActivatedAbilityHandler3D : ManagedBehaviour
 {
     public List<AbilityIconInteractable> currentIconGroup;
-    
+
     public List<ActivatedAbilityIconInteractable> interactables = new();
 
     public void AddInteractable(ActivatedAbilityIconInteractable interactable)
@@ -39,12 +39,14 @@ public class ActivatedAbilityHandler3D : ManagedBehaviour
                     AddInteractable(interactable);
                 }
             });
-        PatchPlugin.Logger.LogDebug($"[Handler3D] Updated interactable list: [{interactables.Join(interactable => $"GO [{interactable.gameObject}] Ability [{interactable.Ability}]")}]");
+
+        if (PatchPlugin.configFullDebug.Value)
+            PatchPlugin.Logger.LogDebug($"[Handler3D] Updated interactable list: [{interactables.Join(interactable => $"GO [{interactable.gameObject}] Ability [{interactable.Ability}]")}]");
     }
 
     public void OnDestroy()
     {
-        foreach(var interactable in interactables)
+        foreach (var interactable in interactables)
         {
             Destroy(interactable);
         }

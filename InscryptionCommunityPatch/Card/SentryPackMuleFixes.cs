@@ -1,9 +1,9 @@
-using System.Collections;
 using DiskCardGame;
 using HarmonyLib;
-using UnityEngine;
 using Pixelplacement;
 using Pixelplacement.TweenSystem;
+using System.Collections;
+using UnityEngine;
 
 namespace InscryptionCommunityPatch.Card;
 
@@ -14,7 +14,7 @@ internal class SentryPackMuleFixes
     // Prevents the logic for opening the pack from running if the pack object is null
     [HarmonyPatch(typeof(PackMule), nameof(PackMule.SpawnAndOpenPack))]
     [HarmonyPrefix]
-    public static bool FixPackMuleBreakingRealityOnDeath(Transform pack)
+    private static bool FixPackMuleBreakingRealityOnDeath(Transform pack)
     {
         if (pack == null)
             return false;
@@ -24,11 +24,12 @@ internal class SentryPackMuleFixes
 
     [HarmonyPatch(typeof(PackMule), nameof(PackMule.OnDie))]
     [HarmonyPostfix]
-    public static IEnumerator FixPackNotExisting(IEnumerator enumerator, PackMule __instance)
+    private static IEnumerator FixPackNotExisting(IEnumerator enumerator, PackMule __instance)
     {
         if (__instance.pack == null)
         {
-            PatchPlugin.Logger.LogDebug($"{__instance.PlayableCard.name} died before fully resolving on board, instantiating pack.");
+            if (PatchPlugin.configFullDebug.Value)
+                PatchPlugin.Logger.LogDebug($"{__instance.PlayableCard.name} died before fully resolving on board, instantiating pack.");
 
             // Instantiates the pack object if it's null
             // Code copied from PackMule's OnResolveOnBoard logic
@@ -43,7 +44,8 @@ internal class SentryPackMuleFixes
             yield return new WaitUntil(() => !Tween.activeTweens.Exists((TweenBase t) => t.targetInstanceID == __instance.PlayableCard.transform.GetInstanceID()));
             __instance.pack.SetParent(__instance.PlayableCard.transform);
 
-            PatchPlugin.Logger.LogDebug($"Pack has been instantiated. Reality has been saved.");
+            if (PatchPlugin.configFullDebug.Value)
+                PatchPlugin.Logger.LogDebug($"Pack has been instantiated. Reality has been saved.");
         }
         yield return enumerator;
     }
@@ -52,7 +54,7 @@ internal class SentryPackMuleFixes
     // (prevents a minor visual glitch)
     [HarmonyPatch(typeof(PackMule), nameof(PackMule.OnResolveOnBoard))]
     [HarmonyPrefix]
-    public static bool FixPackMuleVisualGlitch(PackMule __instance)
+    private static bool FixPackMuleVisualGlitch(PackMule __instance)
     {
         if (__instance.PlayableCard.Dead)
             return false;

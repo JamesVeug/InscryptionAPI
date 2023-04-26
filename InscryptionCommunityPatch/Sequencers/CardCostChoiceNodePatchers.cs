@@ -1,8 +1,9 @@
-using System.Collections;
 using DiskCardGame;
-using UnityEngine;
 using HarmonyLib;
+using InscryptionAPI.Card;
 using InscryptionAPI.Helpers;
+using System.Collections;
+using UnityEngine;
 
 namespace InscryptionCommunityPatch.Sequencers;
 
@@ -19,7 +20,7 @@ internal static class ChoiceNodePatch
                 __result = TextureHelper.GetImageAsTexture("energyCost.png", typeof(ChoiceNodePatch).Assembly);
                 break;
             case ResourceType.Gems:
-                __result = TextureHelper.GetImageAsTexture("moxCost.png", typeof(ChoiceNodePatch).Assembly);
+                __result = TextureHelper.GetImageAsTexture(MoxTextureName(choice.resourceAmount), typeof(ChoiceNodePatch).Assembly);
                 break;
         }
     }
@@ -32,9 +33,10 @@ internal static class ChoiceNodePatch
         if (GetRandomChoosableEnergyCard(randomSeed++) != null)
             __result.Add(new CardChoice() { resourceType = ResourceType.Energy });
 
-        if (GetRandomChoosableMoxCard(randomSeed++) != null)
-            __result.Add(new CardChoice() { resourceType = ResourceType.Gems });
-        
+        int moxIndex = GetRandomMoxIndex(randomSeed++);
+        if (moxIndex > 0)
+            __result.Add(new CardChoice() { resourceType = ResourceType.Gems, resourceAmount = moxIndex });
+
         while (list.Count > 3)
             list.RemoveAt(SeededRandom.Range(0, list.Count, randomSeed++));
 
@@ -48,21 +50,24 @@ internal static class ChoiceNodePatch
     {
         if (card.ChoiceInfo.resourceType == ResourceType.Energy || card.ChoiceInfo.resourceType == ResourceType.Gems)
         {
-            CardInfo cardInfo = new CardInfo();
+            CardInfo cardInfo = new();
             if (card.ChoiceInfo.resourceType == ResourceType.Energy)
                 cardInfo = GetRandomChoosableEnergyCard(SaveManager.SaveFile.GetCurrentRandomSeed());
-            
+
             if (card.ChoiceInfo.resourceType == ResourceType.Gems)
-                cardInfo = GetRandomChoosableMoxCard(SaveManager.SaveFile.GetCurrentRandomSeed());
-            
+            {
+                GemType gemType = card.ChoiceInfo.resourceAmount switch { 3 => GemType.Blue, 2 => GemType.Orange, _ => GemType.Green };
+                cardInfo = GetRandomChoosableMoxCard(SaveManager.SaveFile.GetCurrentRandomSeed(), gemType);
+            }
+
             card.SetInfo(cardInfo);
             card.SetFaceDown(false, false);
             card.SetInteractionEnabled(false);
-            yield return __instance.TutorialTextSequence(card);		
+            yield return __instance.TutorialTextSequence(card);
             card.SetCardbackToDefault();
             yield return __instance.WaitForCardToBeTaken(card);
             yield break;
-        } 
+        }
         else
         {
             yield return enumerator;
@@ -78,12 +83,30 @@ internal static class ChoiceNodePatch
             return CardLoader.Clone(list[SeededRandom.Range(0, list.Count, randomSeed)]);
     }
 
-    public static CardInfo GetRandomChoosableMoxCard(int randomSeed)
+    public static CardInfo GetRandomChoosableMoxCard(int randomSeed, GemType gem)
     {
-        List<CardInfo> list = CardLoader.GetUnlockedCards(CardMetaCategory.ChoiceNode, CardTemple.Nature).FindAll((CardInfo x) => x.gemsCost.Count > 0);
+        List<CardInfo> list = CardLoader.GetUnlockedCards(CardMetaCategory.ChoiceNode, CardTemple.Nature).FindAll((CardInfo x) => x.gemsCost.Count > 0 && x.gemsCost.Contains(gem));
         if (list.Count == 0)
             return null;
         else
             return CardLoader.Clone(list[SeededRandom.Range(0, list.Count, randomSeed)]);
     }
+    public static int GetRandomMoxIndex(int randomSeed)
+    {
+        List<CardInfo> list = CardLoader.GetUnlockedCards(CardMetaCategory.ChoiceNode, CardTemple.Nature).FindAll((CardInfo x) => x.gemsCost.Count > 0);
+
+        if (list.Count == 0)
+            return 0;
+        
+        List<int> moxIndeces = new();
+        if (list.Exists(x => x.gemsCost.Contains(GemType.Green)))
+            moxIndeces.Add(1);
+        if (list.Exists(x => x.gemsCost.Contains(GemType.Orange)))
+            moxIndeces.Add(2);
+        if (list.Exists(x => x.gemsCost.Contains(GemType.Blue)))
+            moxIndeces.Add(3);
+
+        return moxIndeces[SeededRandom.Range(0, moxIndeces.Count, randomSeed)];
+    }
+    public static string MoxTextureName(int index) => "moxCost" + (index switch { 1 => "Green", 2 => "Orange", 3 => "Blue", _ => "" }) + ".png";
 }
