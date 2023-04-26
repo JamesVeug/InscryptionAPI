@@ -45,7 +45,7 @@ public class TribeManager
             allTribes.Add(info);
         }
 
-        ToInfo(Tribe.Squirrel, true, null, "Squirrel", "Fluffy small creatures");
+        ToInfo(Tribe.Squirrel, false, null, "Squirrel", "Fluffy small creatures");
         ToInfo(Tribe.Bird, true, null, "Feathered", "Flying creatures!");
         ToInfo(Tribe.Canine, true, null, "Canine", "Wolves and dog creatures");
         ToInfo(Tribe.Hooved, true, null, "Hooved", "Four legged creatures");
@@ -105,21 +105,14 @@ public class TribeManager
     private static bool GenerateTribeChoices(ref List<CardChoice> __result, int randomSeed)
     {
         // create list of chooseable vanilla tribes then add all chooseable custom tribes
-        List<Tribe> list = new()
-        {
-            Tribe.Bird,
-            Tribe.Canine,
-            Tribe.Hooved,
-            Tribe.Insect,
-            Tribe.Reptile
-        };
-        list.AddRange(TribeManager.tribes.FindAll((x) => x != null && x.tribeChoice).ConvertAll((x) => x.tribe));
+        List<Tribe> list = new();
+        list.AddRange(allTribes.FindAll((x) => x != null && x.tribeChoice).ConvertAll((x) => x.tribe));
         // create a list of this region's dominant tribes
         List<Tribe> tribes = new(RunState.CurrentMapRegion.dominantTribes);
         // get a list of cards obtainable at choice nodes
         List<CardInfo> obtainableCards = CardManager.AllCardsCopy.FindAll(c => c.HasCardMetaCategory(CardMetaCategory.ChoiceNode));
         // remove all non-chooseable tribes and all tribes with no cards
-        tribes.RemoveAll(t => (TribeManager.tribes.Exists(ct => ct.tribe == t && !ct.tribeChoice)) || !obtainableCards.Exists(c => c.IsOfTribe(t)));
+        tribes.RemoveAll(t => (allTribes.Exists(ct => ct.tribe == t && !ct.tribeChoice)) || !obtainableCards.Exists(c => c.IsOfTribe(t)));
         list.RemoveAll(t => tribes.Contains(t) || !obtainableCards.Exists(c => c.IsOfTribe(t)));
         // if list is empty, add Insect as a fallback
         if (list.Count == 0)
