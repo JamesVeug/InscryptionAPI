@@ -6,6 +6,22 @@ using Object = System.Object;
 
 namespace InscryptionAPI.Rulebook;
 
+public class TribeRulebookPage : RuleBookManager.CustomRulebookPage
+{
+
+    public override int numPages { get; }
+    
+    public override bool ShouldBeAdded(int index, AbilityMetaCategory metaCategory)
+    {
+        
+    }
+    
+    public override void CreatePage(RuleBookPageInfo page, PageRangeInfo pageRange, int index)
+    {
+        
+    }
+}
+
 public class TribePage : RuleBookPage
 {
     public SpriteRenderer iconRenderer;
