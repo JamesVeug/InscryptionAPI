@@ -17,7 +17,6 @@ public class CustomTotemsSaveData
     /// </summary>
     public int TotemsBottomCount()
     {
-        InscryptionAPIPlugin.Logger.LogError($"[CustomTotemsSaveData][TotemsBottomCount] To Count: {RunState.Run.totemTops.Count} Bottom Count: {TotemBottoms.Count}\n{Environment.StackTrace}");
         return TotemBottoms.Count;
     }
 

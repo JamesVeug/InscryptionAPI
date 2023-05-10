@@ -1,4 +1,5 @@
-﻿using System.Linq.Expressions;
+﻿using System.Collections;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using DiskCardGame;
@@ -240,7 +241,6 @@ internal static class TotemItemSlot_CreateItem
     internal static bool Prefix(TotemItemSlot __instance, TotemDefinition totemDefinition, bool skipDropAnimation)
     {
         InscryptionAPIPlugin.Logger.LogInfo($"[TotemItemSlot_CreateItem] Prefix " + totemDefinition);
-        InscryptionAPIPlugin.Logger.LogInfo(Environment.StackTrace);
         TotemItemData data = new TotemItemData();
         data.top = ((CustomTotemDefinition)totemDefinition).MakeTop();
         data.bottom = ((CustomTotemDefinition)totemDefinition).MakeBottom();
@@ -313,7 +313,6 @@ internal static class TotemTopData_PrefabId
     }
 }
 
-[HarmonyDebug]
 [HarmonyPatch(typeof(Part1Opponent), "TryModifyCardWithTotem", new Type[]{typeof(PlayableCard)})]
 internal static class Part1Opponent_TryModifyCardWithTotem
 {
@@ -436,21 +435,14 @@ internal static class ReplaceTotemBottomsWithAPI
 {
     private static string AssemblyNamae = ", Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null";
     
-    private static Type BuildPhaseClass = Type.GetType("DiskCardGame.BuildTotemSequencer+<BuildPhase>d__14" + AssemblyNamae);
     private static Type GenerateTotemChoicesClass = Type.GetType("DiskCardGame.BuildTotemSequencer+<>c" + AssemblyNamae);
 
     public static IEnumerable<MethodBase> TargetMethods()
     {
         yield return AccessTools.Method(typeof(BuildTotemSequencer), nameof(BuildTotemSequencer.AutoAssembleTotem)); // RunState.Run.totemBottoms.Count
-        
-        yield return AccessTools.Method(BuildPhaseClass, "MoveNext"); // RunState.Run.totemBottoms.Count
-        
         yield return AccessTools.Method(GenerateTotemChoicesClass, "<GenerateTotemChoices>b__26_0"); // Contains & Count
-
-        // RunState.Initialise = totemBottoms = new List<Ability>();
     }
     
-    [HarmonyDebug]
     internal static IEnumerable<CodeInstruction> Transpiler(MethodBase original, IEnumerable<CodeInstruction> instructions)
     {
         // === We want to turn this
@@ -468,26 +460,12 @@ internal static class ReplaceTotemBottomsWithAPI
         FieldInfo TotemBottoms = typeof(RunState).GetField(nameof(RunState.totemBottoms));
         MethodInfo Count = typeof(List<Ability>).GetProperty(nameof(List<Ability>.Count)).GetMethod;
         MethodInfo Contains = AccessTools.Method(typeof(List<Ability>), nameof(List<Ability>.Contains));
-        /*InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] RunStateRun {RunStateRun}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] TotemBottoms {TotemBottoms}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] Count {Count}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] Contains {Contains}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] ===");*/
         
         MethodInfo RunStateCustomTotems = typeof(TotemManager).GetProperty(nameof(TotemManager.RunStateCustomTotems)).GetMethod;
         MethodInfo FillerMethod = AccessTools.Method(typeof(CustomTotemsSaveData), nameof(CustomTotemsSaveData.DoesNothing));
         MethodInfo CustomTotemCountMethod = AccessTools.Method(typeof(CustomTotemsSaveData), nameof(CustomTotemsSaveData.TotemsBottomCount));
         MethodInfo CustomTotemContainsMethod = AccessTools.Method(typeof(CustomTotemsSaveData), nameof(CustomTotemsSaveData.ContainsCardGainAbility));
-        /*InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] RunStateCustomTotems {RunStateCustomTotems}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] CustomTotemBottoms {CustomTotemBottoms}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] FillerMethod {FillerMethod}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] CustomTotemBottomCount {CustomTotemBottomCount}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] CustomTotemContainsMethod {CustomTotemContainsMethod}");
-        InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] ===");*/
 
-        int overrides = 0;
-        int totemBottomCalls = 0;
-        
         List<CodeInstruction> codes = new List<CodeInstruction>(instructions);
         for (int i = 0; i < codes.Count; i++)
         {
@@ -495,27 +473,16 @@ internal static class ReplaceTotemBottomsWithAPI
             object nextOperand = i+1 < codes.Count ? codes[i+1].operand : null;
             object nextNextOperand = i+2 < codes.Count ? codes[i+2].operand : null;
             object nextNextNextOperand = i+3 < codes.Count ? codes[i+3].operand : null;
-            /*InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] currentOperand {currentOperand}");
-            InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] nextOperand {nextOperand}");
-            InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] nextNextOperand {nextNextOperand}");
-            InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] nextNextNextOperand {nextNextNextOperand}");*/
 
             // RunState.Run.totemBottoms.Count
-            if (nextNextNextOperand == TotemBottoms)
-            {
-                totemBottomCalls++;
-            }
             if (currentOperand == RunStateRun && nextOperand == TotemBottoms && nextNextOperand == Count)
             {
-                InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] Found totemBottoms.Count at index " + i);
                 codes[i].operand = RunStateCustomTotems;
                 codes[i+1] = new CodeInstruction(OpCodes.Call, FillerMethod); // Can't remove this method call so replace it with something that technically does nothing
                 codes[i+2] = new CodeInstruction(OpCodes.Call, CustomTotemCountMethod);
-                overrides++;
             }
             else if (currentOperand == RunStateRun && nextOperand == TotemBottoms && nextNextNextOperand == Contains)
             {
-                InscryptionAPIPlugin.Logger.LogInfo($"[ReplaceTotemBottomsWithAPI] Found totemBottoms.Contains at index " + i);
                 // C: RunState.Run
                 // N: Run.totemBottoms
                 // NN: Ability.Brittle
@@ -523,18 +490,9 @@ internal static class ReplaceTotemBottomsWithAPI
                 codes[i].operand = RunStateCustomTotems;
                 codes[i+1] = new CodeInstruction(OpCodes.Call, FillerMethod); // Can't remove this method call so replace it with something that technically does nothing
                 codes[i+3] = new CodeInstruction(OpCodes.Call, CustomTotemContainsMethod);
-                overrides++;
             }
         }
         
-        InscryptionAPIPlugin.Logger.LogError($"[ReplaceTotemBottomsWithAPI] {original.DeclaringType}.{original.GetType()} overrode {overrides}/{totemBottomCalls} functions");
-        for (int i = 0; i < codes.Count; i++)
-        {
-            CodeInstruction code = codes[i];
-            InscryptionAPIPlugin.Logger.LogInfo(i + ": " + code.ToString());
-        }
-        InscryptionAPIPlugin.Logger.LogError($"[ReplaceTotemBottomsWithAPI] {original.DeclaringType}.{original.GetType()} overrode {overrides}/{totemBottomCalls} functions");
-
         return codes;
     }
 }
@@ -570,31 +528,20 @@ internal static class BuildTotemSequencer_FillInventorySlots
         {
             if (codes[i].operand == alternateTopsandbottoms)
             {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_FillInventorySlots] Found AlternateTopsAndBottoms");
                 codes.Insert(i++, new CodeInstruction(OpCodes.Ldloc_3));
                 codes.Insert(i++, new CodeInstruction(OpCodes.Call, totemBottomFiller));
                 break;
             }
         }
         
-        InscryptionAPIPlugin.Logger.LogInfo($"DONEZ");
-        foreach (CodeInstruction code in codes)
-        {
-            InscryptionAPIPlugin.Logger.LogInfo(code.ToString());
-        }
-
         return codes;
     }
 
     internal static void AddTotemsFromSave(List<ItemData> list)
     {
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_FillInventorySlots] Found FillWithRandomTotemBottoms");
         list.Clear();
         foreach (CustomTotemBottom bottom in TotemManager.RunStateCustomTotems.TotemBottoms)
         {
-            InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_FillInventorySlots] totem bottom " + bottom.EffectID + " " + bottom.EffectID + " " + bottom);
-            
-            
             TotemBottomData totemBottomData = ScriptableObject.CreateInstance<TotemBottomData>();
             totemBottomData.effectParams = new TotemBottomData.EffectParameters();
             
@@ -622,134 +569,124 @@ internal static class BuildTotemSequencer_FillInventorySlots
 [HarmonyPatch]
 internal static class BuildTotemSequencer_BuildPhase
 {
-    private static Type BuildPhaseClass = Type.GetType("DiskCardGame.BuildTotemSequencer+<BuildPhase>d__14, Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null");
+    /// <summary>
+    /// This patch was made as a hack so we can insert custom totem bottoms into the API
+    /// This was tried with a transpiler to replace functions but it resulted in the game skipping the selection process and isntead
+    /// it zoomed into the select piece position, played dialogue, took the mask off and exited the node.  
+    /// </summary>
+    /// <returns></returns>
+    [HarmonyPostfix, HarmonyPatch(typeof(BuildTotemSequencer), nameof(BuildTotemSequencer.BuildPhase))]
+    public static IEnumerator Postfix(IEnumerator enumerator, BuildTotemSequencer __instance)
+    {
+        __instance.selectedTop = null;
+        __instance.selectedBottom = null;
+		Singleton<ViewManager>.Instance.Controller.LockState = ViewLockState.Locked;
+		if (RunState.Run.totemTops.Count + TotemManager.RunStateCustomTotems.TotemsBottomCount() > 2 && RunState.Run.totemTops.Count > 0 && TotemManager.RunStateCustomTotems.TotemsBottomCount() > 0)
+		{
+            __instance.SetInventorySlotsSelectable(selectable: true);
+			Singleton<ViewManager>.Instance.SwitchToView(View.TotemInventory);
+			yield return new WaitForSeconds(0.05f);
+			foreach (SelectableItemSlot inventorySlot in __instance.inventorySlots)
+			{
+				inventorySlot.CursorSelectStarted = (Action<MainInputInteractable>)Delegate.Combine(inventorySlot.CursorSelectStarted, (Action<MainInputInteractable>)delegate(MainInputInteractable i)
+				{
+                    __instance.OnSlotSelectedForBuild(i as SelectableItemSlot);
+				});
+				inventorySlot.CursorEntered = (Action<MainInputInteractable>)Delegate.Combine(inventorySlot.CursorEntered, (Action<MainInputInteractable>)delegate(MainInputInteractable i)
+				{
+					Singleton<OpponentAnimationController>.Instance.SetLookTarget(i.transform, Vector3.up * 2f);
+				});
+			}
+		}
+		else
+		{
+			if (!__instance.AutoAssembleTotem())
+			{
+				yield return LeshyAnimationController.Instance.TakeOffMask();
+				if (!ProgressionData.LearnedMechanic(MechanicsConcept.BuildingTotems))
+				{
+					yield return new WaitForSeconds(0.25f);
+					yield return Singleton<TextDisplayer>.Instance.PlayDialogueEvent("TutorialWoodcarverIncomplete", TextDisplayer.MessageAdvanceMode.Input);
+					yield return new WaitForSeconds(0.25f);
+				}
+				else
+				{
+					yield return new WaitForSeconds(0.25f);
+					yield return Singleton<TextDisplayer>.Instance.PlayDialogueEvent("WoodcarverOutro", TextDisplayer.MessageAdvanceMode.Input);
+					yield return new WaitForSeconds(0.75f);
+				}
+				yield break;
+			}
+			__instance.selectedTop = __instance.inventorySlots.Find((SelectableItemSlot x) => x.Item != null && x.Item.Data is TotemTopData);
+			__instance.selectedBottom = __instance.inventorySlots.Find((SelectableItemSlot x) => x.Item != null && x.Item.Data is TotemBottomData);
+			yield return new WaitForSeconds(0.2f);
+            __instance.selectedTop.Item.PlayExitAnimation();
+			yield return new WaitForSeconds(0.1f);
+            __instance.selectedBottom.Item.PlayExitAnimation();
+			yield return new WaitForSeconds(0.1f);
+		}
+		bool totemConfirmed = false;
+		SelectableItemSlot selectableItemSlot = __instance.completeTotemSlot;
+		selectableItemSlot.CursorSelectStarted = (Action<MainInputInteractable>)Delegate.Combine(selectableItemSlot.CursorSelectStarted, (Action<MainInputInteractable>)delegate
+		{
+			totemConfirmed = __instance.completeTotemSlot.Item != null;
+		});
+		while (!totemConfirmed)
+		{
+			if (!__instance.AutoAssembleTotem())
+			{
+				Singleton<ViewManager>.Instance.Controller.SwitchToControlMode(ViewController.ControlMode.TotemBuilding);
+				Singleton<ViewManager>.Instance.Controller.LockState = ViewLockState.Unlocked;
+			}
+			yield return new WaitUntil(() => __instance.selectedTop != null && __instance.selectedBottom != null);
+			Singleton<RuleBookController>.Instance.SetShown(shown: false);
+			Singleton<ViewManager>.Instance.Controller.SwitchToControlMode(ViewController.ControlMode.TotemPieceSelection);
+			Singleton<ViewManager>.Instance.SwitchToView(View.Default);
+			Singleton<OpponentAnimationController>.Instance.ClearLookTarget();
+			yield return __instance.AssembleTotem(__instance.selectedTop, __instance.selectedBottom);
+			if (!__instance.AutoAssembleTotem())
+			{
+                __instance.returnToInventoryInteractable.SetEnabled(enabled: true);
+			}
+			yield return new WaitUntil(() => __instance.selectedTop == null || __instance.selectedBottom == null || totemConfirmed);
+            __instance.returnToInventoryInteractable.SetEnabled(enabled: false);
+			Singleton<RuleBookController>.Instance.SetShown(shown: false);
+		}
+		Singleton<ViewManager>.Instance.Controller.LockState = ViewLockState.Locked;
+		foreach (SelectableItemSlot inventorySlot2 in __instance.inventorySlots)
+		{
+			inventorySlot2.ClearDelegates();
+		}
+		TotemItemData completedTotem = __instance.completeTotemSlot.Item.Data as TotemItemData;
+		if (!ProgressionData.LearnedMechanic(MechanicsConcept.BuildingTotems))
+		{
+			string[] variableStrings = new string[2]
+			{
+				Localization.Translate(AbilitiesUtil.GetInfo(completedTotem.bottom.effectParams.ability).rulebookName),
+				Localization.Translate(completedTotem.top.prerequisites.tribe.ToString())
+			};
+			yield return Singleton<TextDisplayer>.Instance.PlayDialogueEvent("TutorialWoodcarverComplete", TextDisplayer.MessageAdvanceMode.Input, TextDisplayer.EventIntersectMode.Wait, variableStrings);
+			ProgressionData.SetMechanicLearned(MechanicsConcept.BuildingTotems);
+		}
+		else
+		{
+			yield return Singleton<TextDisplayer>.Instance.PlayDialogueEvent("WoodcarverOutro", TextDisplayer.MessageAdvanceMode.Input);
+		}
+		TotemDefinition totemDefinition = CreateCustomTotemDefinition(completedTotem);
+		RunState.Run.totems.Clear();
+		RunState.Run.totems.Add(totemDefinition);
+		__instance.completeTotemSlot.SetEnabled(enabled: false);
+		__instance.completeTotemSlot.ClearDelegates();
+		__instance.completeTotemSlot.Item.PlayExitAnimation();
+		UnityEngine.Object.Destroy(__instance.completeTotemSlot.Item.gameObject, 0.25f);
+		yield return new WaitForSeconds(0.3f);
+		Singleton<ItemsManager>.Instance.UpdateItems();
+		Singleton<OpponentAnimationController>.Instance.ClearLookTarget();
+		yield return LeshyAnimationController.Instance.TakeOffMask();
+		yield return new WaitForSeconds(1f);
+	}
     
-    public static IEnumerable<MethodBase> TargetMethods()
-    {
-        yield return AccessTools.Method(BuildPhaseClass, "MoveNext");
-    }
-
-    internal static bool Prefix(object __instance)
-    {
-        FieldInfo TotemData = BuildPhaseClass.GetField("<>1__state", BindingFlags.Instance | BindingFlags.NonPublic);
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Prefix " + TotemData.GetValue(__instance));
-        return true;
-    }
-
-    internal static void Postfix(object __instance)
-    {
-        FieldInfo TotemData = BuildPhaseClass.GetField("<>1__state", BindingFlags.Instance | BindingFlags.NonPublic);
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Postfix " + TotemData.GetValue(__instance));
-    }
-    
-    internal static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
-    {
-        // === We want to turn this
-
-        // RunState.Run.totems.Add(totemDefinition);
-
-        // === Into this
-
-        // RunState.Run.totems.Add(CreateCustomTotemDefinition(totemDefinition));
-
-        // ===
-        MethodInfo SetInventorySlotsSelectable = AccessTools.Method(typeof(BuildTotemSequencer), nameof(BuildTotemSequencer.SetInventorySlotsSelectable));
-        MethodInfo AutoAssembleTotem = AccessTools.Method(typeof(BuildTotemSequencer), nameof(BuildTotemSequencer.AutoAssembleTotem));
-        MethodInfo LogA = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogA));
-        MethodInfo LogB = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogB));
-        MethodInfo LogState = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogState));
-        MethodInfo LogReturn = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogReturn));
-        MethodInfo LogBreak = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogBreak));
-        MethodInfo LogBreaks = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogBreakS));
-        MethodInfo LogLeave = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.LogBreakS));
-        
-        
-        MethodInfo OverrideTotemDefinition = AccessTools.Method(typeof(BuildTotemSequencer_BuildPhase), nameof(BuildTotemSequencer_BuildPhase.CreateCustomTotemDefinition));
-        //ConstructorInfo totemDefinitionCTR = typeof(TotemDefinition).GetConstructor(new Type[]{});
-        FieldInfo TotemData = BuildPhaseClass.GetField("<completedTotem>5__2", BindingFlags.Instance | BindingFlags.NonPublic);
-        FieldInfo StateField = BuildPhaseClass.GetField("<>1__state", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] TotemData " + TotemData);
-        MethodInfo AddMethod = typeof(List<TotemDefinition>).GetMethod(nameof(List<TotemDefinition>.Add));
-
-
-        bool foundAutoAssemble = false;
-        List<CodeInstruction> codes = new List<CodeInstruction>(instructions);
-        for (int i = 0; i < codes.Count; i++)
-        {
-            if (codes[i].opcode == OpCodes.Stfld && codes[i].operand == StateField)
-            {
-                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogState));
-            }
-            if (codes[i].opcode == OpCodes.Ret)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found Return");
-                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogReturn));
-            }
-            if (codes[i].operand == SetInventorySlotsSelectable)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found SetInventorySlotsSelectable");
-                codes.Insert(++i, new CodeInstruction(OpCodes.Call, LogA));
-            }
-            if (!foundAutoAssemble && codes[i].operand == AutoAssembleTotem)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found AutoAssembleTotem");
-                codes.Insert(++i, new CodeInstruction(OpCodes.Call, LogA));
-                foundAutoAssemble = true;
-            }
-            if (codes[i].opcode == OpCodes.Br)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found BR");
-                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogBreak));
-                foundAutoAssemble = true;
-            }
-            if (codes[i].opcode == OpCodes.Br_S)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found BRs");
-                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogBreaks));
-                foundAutoAssemble = true;
-            }
-            if (codes[i].opcode == OpCodes.Leave)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found Leave");
-                codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogLeave));
-                foundAutoAssemble = true;
-            }
-            
-            if (codes[i].operand == AddMethod)
-            {
-                InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase] Found List<TotemDefinition>.Add");
-                codes.Insert(i++, new CodeInstruction(OpCodes.Ldarg_0, TotemData));
-                codes.Insert(i++, new CodeInstruction(OpCodes.Ldfld, TotemData));
-                codes.Insert(i++, new CodeInstruction(OpCodes.Call, OverrideTotemDefinition));
-            }
-        }
-
-
-        for (int i = 0; i < codes.Count; i+=2)
-        {
-            int x = i;
-            LambdaExpression lambdaExpression = Expression.Call() new Expression<void>()
-            Action methodInfo = new Action(() =>
-            {
-                
-                int j = x;
-                InscryptionAPIPlugin.Logger.LogInfo($"[Line] " + j);
-            });
-            
-            codes.Insert(i, new CodeInstruction(OpCodes.Callvirt, methodInfo));
-        }
-        
-        /*InscryptionAPIPlugin.Logger.LogInfo($"DONEZ");
-        foreach (CodeInstruction code in codes)
-        {
-            InscryptionAPIPlugin.Logger.LogInfo(code.ToString());
-        }
-        InscryptionAPIPlugin.Logger.LogInfo($"DONEZ");*/
-
-        return codes;
-    }
-
-    internal static TotemDefinition CreateCustomTotemDefinition(TotemDefinition vanillaDefinition, TotemItemData bottomData)
+    internal static TotemDefinition CreateCustomTotemDefinition(TotemItemData bottomData)
     {
         CustomTotemDefinition definition = new CustomTotemDefinition()
         {
@@ -760,46 +697,6 @@ internal static class BuildTotemSequencer_BuildPhase
         
         InscryptionAPIPlugin.Logger.LogInfo($"[CreateCustomTotemDefinition] " + definition.BottomEffectID + " " + definition.ability);
         return definition;
-    }
-
-    internal static void LogA()
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[SetInventorySlotsSelectable]");
-    }
-    
-    internal static bool LogB(bool a)
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[AutoAssemble] " + a);
-        return a;
-    }
-    
-    internal static void LogBreak()
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[AutoAssemble] Br");
-    }
-
-    
-    internal static void LogBreakS()
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[AutoAssemble] Br.s");
-    }
-
-    
-    internal static void LogLeave()
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[AutoAssemble] Leave");
-    }
-    
-    internal static int LogState(int state)
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildPhase] State: " + state);
-        return state;
-    }
-    
-    internal static bool LogReturn(bool a)
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildPhase] LogReturn " + a);
-        return a;
     }
 }
 
@@ -886,74 +783,5 @@ internal class CompositeTotemPiece_Start
         
         // Change icon emission if we have a renderer for it
         return __instance.emissiveRenderer != null;
-    }
-}
-
-/// <summary>
-/// /////////////////////////////// TEMPORARY
-/// </summary>
-
-[HarmonyPatch]
-internal static class BuildTotemSequencer_AutoAssembleTotem
-{
-    public static IEnumerable<MethodBase> TargetMethods()
-    {
-        yield return AccessTools.Method(typeof(BuildTotemSequencer), nameof(BuildTotemSequencer.AutoAssembleTotem)); // RunState.Run.totemBottoms.Count
-    }
-    
-    [HarmonyDebug]
-    internal static void Postfix(BuildTotemSequencer __instance, ref bool __result)
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_AutoAssembleTotem] '{__instance.selectedTop}' '{__instance.selectedBottom}' '{__instance.completeTotemSlot.Item}' = {__result}");
-    }
-}
-
-
-[HarmonyPatch]
-internal static class BuildTotemSequencer_while_selectedTop_not_null_and_selectedBottom_not_null
-{
-    private static Type CompiledClass = Type.GetType("DiskCardGame.BuildTotemSequencer+<>c__DisplayClass14_0, Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null");
-    
-    public static IEnumerable<MethodBase> TargetMethods()
-    {
-        yield return AccessTools.Method(CompiledClass, "<BuildPhase>b__2"); // RunState.Run.totemBottoms.Count
-    }
-    
-    internal static void Postfix(BuildTotemSequencer __instance, ref bool __result)
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer] WaitUntil(() => selectedTop != null && selectedBottom != null = '{__result}'");
-    }
-}
-
-
-[HarmonyPatch]
-internal static class BuildTotemSequencer_AssembleTotem
-{
-    private static Type CompiledClass = Type.GetType("DiskCardGame.BuildTotemSequencer+<BuildPhase>d__14, Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null");
-    public static IEnumerable<MethodBase> TargetMethods()
-    {
-        yield return AccessTools.Method(typeof(BuildTotemSequencer), "AssembleTotem"); // RunState.Run.totemBottoms.Count
-    }
-    
-    internal static void Postfix(BuildTotemSequencer __instance, SelectableItemSlot topSlot, SelectableItemSlot bottomSlot)
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_AssembleTotem] topSlot: {topSlot.Item} botSlot: {topSlot.Item}");
-    }
-}
-
-
-
-[HarmonyPatch]
-internal static class BuildTotemSequencer_BuildPhase_PrefixPrefix
-{
-    public static IEnumerable<MethodBase> TargetMethods()
-    {
-        yield return AccessTools.Method(typeof(BuildTotemSequencer), nameof(BuildTotemSequencer.BuildPhase));
-    }
-    
-    internal static bool Prefix()
-    {
-        InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_BuildPhase_PrefixPrefix] Creating " + Environment.StackTrace);
-        return true;
     }
 }
