@@ -408,9 +408,7 @@ public static class ConsumableItemManager
                 {
                     Renderer iconRenderer = icon.GetComponent<Renderer>();
                     if (iconRenderer != null)
-                    {
                         iconRenderer.material.mainTexture = data.rulebookSprite.texture;
-                    }
                     else
                     {
                         InscryptionAPIPlugin.Logger.LogError($"Could not find Renderer on the GameObject named Icon for item {data.rulebookName} to assign item icon!");
@@ -422,9 +420,8 @@ public static class ConsumableItemManager
                 }
             }
             else
-            {
                 InscryptionAPIPlugin.Logger.LogError($"Could not change icon for {data.rulebookName}. No sprite defined!");
-            }
+
         }
 
         // Add default animation if it doesn't have one
@@ -433,9 +430,8 @@ public static class ConsumableItemManager
         {
             Transform child = prefab.transform.GetChild(0);
             if (child != null)
-            {
                 animator = child.gameObject.AddComponent<Animator>();
-            }
+
             else
             {
                 InscryptionAPIPlugin.Logger.LogError($"Could not add Animator to item {data.rulebookName}. Missing a child game object!. Make sure you have a GameObject called Anim!");
@@ -459,6 +455,7 @@ public static class ConsumableItemManager
         }
 
         // Mark as dont destroy on load so it doesn't get removed between levels
+        prefab.transform.SetParent(null);
         UnityObject.DontDestroyOnLoad(prefab);
 
         return consumableItem;
@@ -484,7 +481,7 @@ public static class ConsumableItemManager
 
         ModelType modelType = RegisterPrefab(pluginGUID, rulebookName, resource);
 
-        GameObject.DontDestroyOnLoad(prefab);
+        UnityObject.DontDestroyOnLoad(prefab);
         prefab.SetActive(false);
 
         return New(pluginGUID, rulebookName, rulebookDescription, rulebookSprite, itemType, modelType);
