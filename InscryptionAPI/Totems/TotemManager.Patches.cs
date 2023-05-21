@@ -5,6 +5,7 @@ using System.Reflection.Emit;
 using DiskCardGame;
 using HarmonyLib;
 using InscryptionAPI.Card;
+using InscryptionAPI.Helpers.Extensions;
 using InscryptionAPI.Saves;
 using UnityEngine;
 
@@ -123,10 +124,29 @@ internal static class ItemsUtil_AllConsumables
     internal static void FillWithRandomTotemBottoms(List<ItemData> list, ref int seed)
     {
         InscryptionAPIPlugin.Logger.LogInfo($"Starting FillWithRandomTotemBottoms " + list.Count + " " + seed);
+        int startAmount = list.Count;
+        
         foreach (TotemBottomEffect effect in TotemManager.allBottomEffects)
         {
-            list.AddRange(effect.GetAllOptions(seed++));
+            List<TotemBottomData> collection = effect.GetAllOptions(seed);
+            InscryptionAPIPlugin.Logger.LogInfo($"Filling " + effect.EffectID + " " + collection.Count);
+            for (int i = 0; i < startAmount && i < collection.Count; i++)
+            {
+                int index = collection.GetSeededRandomIndex(seed++);
+                TotemBottomData totemBottomData = collection[index];
+                InscryptionAPIPlugin.Logger.LogInfo($"totemBottomData " + totemBottomData + " " + totemBottomData.effect + " " + totemBottomData.effectParams);
+                list.Add(totemBottomData);
+                collection.RemoveAt(index);
+            }
+            InscryptionAPIPlugin.Logger.LogInfo($"Complete " + list.Count);
         }
+        
+        if (list.Count > startAmount)
+        {
+            list.SeededShuffle(seed);
+            list.RemoveRange(startAmount, list.Count - startAmount);
+        }
+        
         InscryptionAPIPlugin.Logger.LogInfo($"Done FillWithRandomTotemBottoms " + list.Count + " " + seed);
     }
 
@@ -325,24 +345,36 @@ internal static class Part1Opponent_TryModifyCardWithTotem
         if (card.TemporaryMods.Exists((CardModificationInfo x) => x.fromTotem))
             return false;
         
-        CardModificationInfo info = new CardModificationInfo();
-        info.fromTotem = true;
+        CardModificationInfo mod = new CardModificationInfo();
+        mod.fromTotem = true;
 
-        TotemBottomEffect effect = TotemManager.allBottomEffects.Find((a)=>a.EffectID == __instance.totem.TotemItemData.bottom.effect);
-        if (effect != null)
+        if (__instance.totem.TotemItemData.bottom.effect == TotemEffect.CardGainAbility)
         {
-            effect.ModifyCardWithTotem(__instance.totem.TotemItemData.bottom, info);
+            // vanilla effects
+            mod.abilities = new List<Ability>()
+            {
+                __instance.totem.TotemItemData.bottom.effectParams.ability
+            };
         }
         else
         {
-            InscryptionAPIPlugin.Logger.LogError($"Could not find totem data for totem bottom {__instance.totem.TotemItemData.bottom.name} {__instance.totem.TotemItemData.bottom.PrefabId}");
-            info.abilities = new List<Ability>()
+            // custom effects
+            TotemBottomEffect effect = TotemManager.allBottomEffects.Find((a) => a.EffectID == __instance.totem.TotemItemData.bottom.effect);
+            if (effect != null)
             {
-                Ability.DrawRabbits
-            };
+                effect.ModifyCardWithTotem(__instance.totem.TotemItemData.bottom, mod);
+            }
+            else
+            {
+                InscryptionAPIPlugin.Logger.LogError($"Could not find totem data for totem bottom {__instance.totem.TotemItemData.bottom.name} {__instance.totem.TotemItemData.bottom.PrefabId}");
+                mod.abilities = new List<Ability>()
+                {
+                    Ability.DrawRabbits
+                };
+            }
         }
 
-        card.AddTemporaryMod(info);
+        card.AddTemporaryMod(mod);
         return false;
     }
 }
@@ -402,19 +434,29 @@ internal static class BuildTotemSequencer_NewPiecePhase
         InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_NewPiecePhase] slot " + slot);
         if (slot.Item.Data is TotemBottomData totemBottomData)
         {
-            
             InscryptionAPIPlugin.Logger.LogInfo($"[BuildTotemSequencer_NewPiecePhase] Saving {totemBottomData.effect} to save data");
             
             // Add to Modded save
             CustomTotemBottom CustomBottom = new CustomTotemBottom()
             {
-                EffectID = totemBottomData.effect
+                EffectID = totemBottomData.effect,
+                EffectParameters = totemBottomData.effectParams
             };
             
-            if (totemBottomData.effect == TotemEffect.CardGainAbility)
-            {
-                CustomBottom.Ability = RunState.Run.totemBottoms[RunState.Run.totemBottoms.Count - 1];
-            }
+            // if (totemBottomData.effect == TotemEffect.CardGainAbility)
+            // {
+            //     CustomBottom.EffectParameters = new TotemBottomData.EffectParameters()
+            //     {
+            //         ability = RunState.Run.totemBottoms[RunState.Run.totemBottoms.Count - 1]
+            //     };
+            // }
+            // else
+            // {
+            //     CustomBottom.EffectParameters = new TotemBottomData.EffectParameters()
+            //     {
+            //         ability = RunState.Run.totemBottoms[RunState.Run.totemBottoms.Count - 1]
+            //     };
+            // }
             
             // Remove item (Vanilla code already added it)
             RunState.Run.totemBottoms.RemoveAt(RunState.Run.totemBottoms.Count - 1);
@@ -549,11 +591,12 @@ internal static class BuildTotemSequencer_FillInventorySlots
             if (totemBottom == null)
             {
                 totemBottomData.effect = TotemEffect.CardGainAbility; // vanilla only has this 1 ability
-                totemBottomData.effectParams.ability = bottom.Ability;
+                totemBottomData.effectParams.ability = bottom.EffectParameters.ability;
             }
             else
             {
                 totemBottomData.effect = totemBottom.EffectID;
+                totemBottomData.effectParams = bottom.EffectParameters;
             }
             
             // Custom totem bottom
@@ -688,12 +731,25 @@ internal static class BuildTotemSequencer_BuildPhase
     
     internal static TotemDefinition CreateCustomTotemDefinition(TotemItemData bottomData)
     {
-        CustomTotemDefinition definition = new CustomTotemDefinition()
+        CustomTotemDefinition definition = null;
+        if (bottomData.bottom.effect == TotemEffect.CardGainAbility)
         {
-            BottomEffectID = bottomData.bottom.effect,
-            ability = bottomData.bottom.effectParams.ability,
-            tribe = bottomData.top.prerequisites.tribe,
-        };
+            definition = new CustomTotemDefinition()
+            {
+                BottomEffectID = bottomData.bottom.effect,
+                ability = bottomData.bottom.effectParams.ability,
+                tribe = bottomData.top.prerequisites.tribe,
+            };
+        }
+        else
+        {
+            definition = new CustomTotemDefinition()
+            {
+                BottomEffectID = bottomData.bottom.effect,
+                EffectParameters = bottomData.bottom.effectParams,
+                tribe = bottomData.top.prerequisites.tribe,
+            };
+        }
         
         InscryptionAPIPlugin.Logger.LogInfo($"[CreateCustomTotemDefinition] " + definition.BottomEffectID + " " + definition.ability);
         return definition;
@@ -713,7 +769,7 @@ internal class ItemSlot_CreateItem
         if (data is not TotemBottomData bottomData)
         {
             // We only care about TotemBottomData
-            InscryptionAPIPlugin.Logger.LogInfo($"[ItemSlot_CreateItem] {data}");
+            InscryptionAPIPlugin.Logger.LogInfo($"[ItemSlot_CreateItem] {data} {data.GetType()}");
             return true;
         }
         if (__instance == null)
@@ -733,7 +789,7 @@ internal class ItemSlot_CreateItem
         if (totemBottom == null)
         {
             // no custom data
-            InscryptionAPIPlugin.Logger.LogInfo($"Making Vanilla Totem Bottom " + bottomData.prefabId);
+            InscryptionAPIPlugin.Logger.LogInfo($"Making Vanilla Totem Bottom " + bottomData.effect);
             return true;
         }
 
@@ -749,13 +805,11 @@ internal class ItemSlot_CreateItem
 
         if (!gameObject.TryGetComponent(out TotemTriggerReceiver triggerReceiver))
         {
-            InscryptionAPIPlugin.Logger.LogError($"Warning. Item {bottomData.name} with prefab id does not have a TotemTriggerReceiver component!");
-            triggerReceiver = (TotemTriggerReceiver)gameObject.AddComponent(totemBottom.TriggerReceiver);
+            gameObject.AddComponent(totemBottom.TriggerReceiver);
         }
         if (!gameObject.TryGetComponent(out CompositeTotemPiece compositeTotemPiece))
         {
-            InscryptionAPIPlugin.Logger.LogError($"Warning. Item {bottomData.name} with prefab id does not have a CompositeTotemPiece component!");
-            compositeTotemPiece = (CompositeTotemPiece)gameObject.AddComponent(totemBottom.CompositeType);
+            gameObject.AddComponent(totemBottom.CompositeType);
         }
         InscryptionAPIPlugin.Logger.LogInfo($"CompositeTotemPiece " + compositeTotemPiece);
         

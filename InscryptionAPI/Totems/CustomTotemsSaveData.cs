@@ -9,7 +9,7 @@ public class CustomTotemsSaveData
 
     public bool ContainsCardGainAbility(Ability ability)
     {
-        return TotemBottoms.Find((a) => a.EffectID == TotemEffect.CardGainAbility && a.Ability == ability) != null;
+        return TotemBottoms.Find((a) => a.EffectID == TotemEffect.CardGainAbility && a.EffectParameters.ability == ability) != null;
     }
     
     /// <summary>
@@ -31,5 +31,5 @@ public class CustomTotemsSaveData
 public class CustomTotemBottom
 {
     public TotemEffect EffectID; // Type
-    public Ability Ability; // Default data
+    public TotemBottomData.EffectParameters EffectParameters; // Default data
 }

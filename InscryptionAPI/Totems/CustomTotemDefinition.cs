@@ -6,15 +6,26 @@ namespace InscryptionAPI.Totems;
 public class CustomTotemDefinition : TotemDefinition
 {
     public TotemEffect BottomEffectID;
+    public TotemBottomData.EffectParameters EffectParameters;
 
     public new TotemBottomData MakeBottom()
     {
         InscryptionAPIPlugin.Logger.LogInfo($"[CustomTotemDefinition] MakeBottom");
         TotemBottomData instance = ScriptableObject.CreateInstance<TotemBottomData>();
         instance.effect = BottomEffectID;
-        instance.effectParams = new TotemBottomData.EffectParameters();
-        instance.effectParams.ability = this.ability;
-        
+        if (BottomEffectID == TotemEffect.CardGainAbility)
+        {
+            
+            instance.effectParams = new TotemBottomData.EffectParameters()
+            {
+                ability = EffectParameters.ability
+            };
+        }
+        else
+        {
+            instance.effectParams = EffectParameters;
+        }
+
         InscryptionAPIPlugin.Logger.LogInfo($"[CustomTotemDefinition] MakeBottom " + instance.effect);
         return instance;
     }

@@ -12,7 +12,7 @@ public class TotemBottomEffect
         // Required so 'Activator.CreateInstance(totem.Effect)' works
     }
     
-    public virtual List<TotemBottomData> GetAllOptions(int randomSeed)
+    public virtual List<TotemBottomData> GetAllOptions(int seed)
     {
         List<TotemBottomData> data = new List<TotemBottomData>();
         TotemBottomData totemBottomData = ScriptableObject.CreateInstance<TotemBottomData>();

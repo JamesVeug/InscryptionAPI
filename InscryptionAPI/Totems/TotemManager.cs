@@ -16,7 +16,9 @@ public static class TotemManager
         AllTribes
     }
 
-    public static CustomTotemBottom NewBottomPiece<T>(string guid, string rulebookName, string rulebookDescription, GameObject prefab) where T : TotemTriggerReceiver
+    public static CustomTotemBottom NewBottomPiece<T, Y>(string guid, string rulebookName, string rulebookDescription, GameObject prefab) 
+        where T : TotemTriggerReceiver
+        where Y : TotemBottomEffect
     {
         if (prefab == null)
         {
@@ -32,7 +34,8 @@ public static class TotemManager
             RulebookDescription = rulebookDescription,
             GUID = guid,
             Prefab = prefab,
-            TriggerReceiver = typeof(T)
+            TriggerReceiver = typeof(T),
+            Effect = typeof(Y),
         });
     }
 
@@ -54,27 +57,6 @@ public static class TotemManager
             Icon = icon,
             Prefab = DefaultTotemBottom,
             TriggerReceiver = typeof(T)
-        });
-    }
-
-    public static CustomTotemBottom NewBottomPiece<T, Y>(string name, string guid, Texture icon) where T : CompositeTotemPiece where Y : TotemBottomEffect
-    {
-        if (icon == null)
-        {
-            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{name}. Texture is null!");
-            return null;
-        }
-
-        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, name);
-        return Add(new CustomTotemBottom()
-        {
-            EffectID = id,
-            RulebookName = name,
-            GUID = guid,
-            Icon = icon,
-            Prefab = DefaultTotemBottom,
-            CompositeType = typeof(T),
-            Effect = typeof(Y)
         });
     }
 
@@ -359,6 +341,8 @@ public static class TotemManager
 
     public class CustomTotemBottom
     {
+        public string PrefabID => GUID + "_" + RulebookName;
+        
         public string GUID;
         public string RulebookName;
         public string RulebookDescription;
@@ -368,6 +352,12 @@ public static class TotemManager
         public Type CompositeType = typeof(CustomIconTotemBottomPiece);
         public Type Effect = typeof(TotemBottomEffect);
         public Type TriggerReceiver = null;
+
+        public CustomTotemBottom SetTriggerReceiverType(Type type)
+        {
+            TriggerReceiver = type;
+            return this;
+        }
 
         public CustomTotemBottom SetCompositeTotemPieceType(Type type)
         {
