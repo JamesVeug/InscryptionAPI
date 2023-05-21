@@ -42,4 +42,22 @@ public static class ListExtensions
         int index = SeededRandom.Range(0, list.Count, seed);
         return list[index];
     }
+
+    public static int GetSeededRandomIndex<T>(this ICollection<T> list, int seed)
+    {
+        return SeededRandom.Range(0, list.Count, seed);
+    }
+
+    public static void SeededShuffle<T>(this List<T> list, int seed)
+    {
+        for (int i = 0; i < list.Count; i++)
+        {
+            // get random index
+            // swap with current index
+            int randomIndex = SeededRandom.Range(0, list.Count, seed++);
+            T temp = list[i];
+            list[i] = list[randomIndex];
+            list[randomIndex] = temp;
+        }
+    }
 }
