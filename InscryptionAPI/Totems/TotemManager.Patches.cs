@@ -267,6 +267,16 @@ internal static class TotemItemSlot_CreateItem
         
         InscryptionAPIPlugin.Logger.LogInfo($"[TotemItemSlot_CreateItem] Bottom " + data.bottom);
         __instance.CreateItem(data, skipDropAnimation);
+        
+        /*Totem totemItem = (Totem)__instance.Item;
+        TriggerReceiver triggerReceiver = totemItem.GetComponent<TriggerReceiver>();
+        InscryptionAPIPlugin.Logger.LogInfo($"[TotemItemSlot_CreateItem] triggerReceiver " + triggerReceiver);
+        if (triggerReceiver == null)
+        {
+            TotemManager.CustomTotemBottom bottom = TotemManager.totemBottoms.Find((a)=>a.EffectID == data.bottom.effect);
+            totemItem.gameObject.AddComponent(bottom.TriggerReceiver);
+            InscryptionAPIPlugin.Logger.LogInfo($"[TotemItemSlot_CreateItem] added triggerReceiver " + bottom.TriggerReceiver);
+        }*/
         return false;
     }
     
@@ -803,10 +813,10 @@ internal class ItemSlot_CreateItem
 
         gameObject.transform.localPosition = Vector3.zero;
 
-        if (!gameObject.TryGetComponent(out TotemTriggerReceiver triggerReceiver))
+        /*if (!gameObject.TryGetComponent(out TotemTriggerReceiver triggerReceiver))
         {
             gameObject.AddComponent(totemBottom.TriggerReceiver);
-        }
+        }*/
         if (!gameObject.TryGetComponent(out CompositeTotemPiece compositeTotemPiece))
         {
             gameObject.AddComponent(totemBottom.CompositeType);

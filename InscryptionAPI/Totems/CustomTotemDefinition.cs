@@ -18,7 +18,7 @@ public class CustomTotemDefinition : TotemDefinition
             
             instance.effectParams = new TotemBottomData.EffectParameters()
             {
-                ability = EffectParameters.ability
+                ability = ability
             };
         }
         else
