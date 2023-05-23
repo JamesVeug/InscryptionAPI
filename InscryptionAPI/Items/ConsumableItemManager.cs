@@ -454,9 +454,12 @@ public static class ConsumableItemManager
             }
         }
 
-        // Mark as dont destroy on load so it doesn't get removed between levels
+        // Mark as DontDestroyOnLoad so it doesn't get removed between levels
+        // SetParent shenanigans are to avoid console warnings
+        var parent = prefab.transform.parent;
         prefab.transform.SetParent(null);
         UnityObject.DontDestroyOnLoad(prefab);
+        prefab.transform.SetParent(parent);
 
         return consumableItem;
     }
