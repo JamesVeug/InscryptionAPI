@@ -1,10 +1,8 @@
 using DiskCardGame;
-using HarmonyLib;
-using InscryptionAPI.Card;
 using InscryptionAPI.Helpers;
 using System.Collections.ObjectModel;
-using System.Reflection;
-using System.Reflection.Emit;
+using InscryptionAPI.Guid;
+using InscryptionAPI.Saves;
 using UnityEngine;
 
 namespace InscryptionAPI.Totems;
@@ -18,158 +16,48 @@ public static class TotemManager
         AllTribes
     }
 
-    [HarmonyPatch(typeof(BuildTotemSequencer), "GenerateTotemChoices", new System.Type[] { typeof(BuildTotemNodeData), typeof(int) })]
-    private class ItemsUtil_AllConsumables
+    public static CustomTotemBottom NewBottomPiece<T, Y>(string guid, string rulebookName, string rulebookDescription, GameObject prefab) 
+        where T : TotemTriggerReceiver
+        where Y : TotemBottomEffect
     {
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        if (prefab == null)
         {
-            if (InscryptionAPIPlugin.configCustomTotemTopTypes.Value == TotemTopState.Vanilla)
-            {
-                return instructions;
-            }
-
-            // === We want to turn this
-
-            // List<Tribe> list = new()
-            // {
-            //     Tribe.Bird,
-            //     Tribe.Canine,
-            //     Tribe.Hooved,
-            //     Tribe.Insect,
-            //     Tribe.Reptile
-            // };
-
-            // === Into this
-
-            // List<Tribe> list = new()
-            // {
-            //     Tribe.Bird,
-            //     Tribe.Canine,
-            //     Tribe.Hooved,
-            //     Tribe.Insect,
-            //     Tribe.Reptile
-            // };
-            // ItemsUtil_AllConsumables.AddCustomTribesToList(list);
-
-            // ===
-
-
-            List<CodeInstruction> codes = new List<CodeInstruction>(instructions);
-            for (int i = 0; i < codes.Count; i++)
-            {
-                if (codes[i].opcode == OpCodes.Newobj)
-                {
-                    // Make a new list
-                    for (int j = i + 1; i < codes.Count; j++)
-                    {
-                        if (codes[j].opcode == OpCodes.Stloc_0)
-                        {
-                            MethodInfo customMethod = AccessTools.Method(typeof(ItemsUtil_AllConsumables), nameof(AddCustomTribesToList), new Type[] { typeof(List<Tribe>) });
-
-                            // Stored the list
-                            codes.Insert(j + 1, new CodeInstruction(OpCodes.Ldloc_0));
-                            codes.Insert(j + 2, new CodeInstruction(OpCodes.Call, customMethod));
-                            return codes;
-                        }
-                    }
-                }
-            }
-
-            return codes;
+            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{rulebookName}. Prefab is null!");
+            return null;
         }
 
-        public static void AddCustomTribesToList(List<Tribe> list)
+        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, rulebookName);
+        return Add(new CustomTotemBottom()
         {
-            // get a list of all cards with a tribe
-            List<CardInfo> tribedCards = CardManager.AllCardsCopy.FindAll(x => x.tribes.Count > 0);
-
-            // iterate across all custom tribes that are obtainable as tribe choices
-            foreach (TribeManager.TribeInfo tribeInfo in TribeManager.NewTribes.Where(x => x.tribeChoice))
-            {
-                // Only add if we have at least 1 card of it
-                if (tribedCards.Exists(ci => ci.IsOfTribe(tribeInfo.tribe)))
-                    list.Add(tribeInfo.tribe);
-            }
-
-            // remove tribes without any cards
-            list.RemoveAll(x => !tribedCards.Exists(ci => ci.IsOfTribe(x)));
-        }
+            EffectID = id,
+            RulebookName = rulebookName,
+            RulebookDescription = rulebookDescription,
+            GUID = guid,
+            Prefab = prefab,
+            TriggerReceiver = typeof(T),
+            Effect = typeof(Y),
+        });
     }
 
-    [HarmonyPatch(typeof(ResourceBank), "Awake", new System.Type[] { })]
-    private class ResourceBank_Awake
+    public static CustomTotemBottom NewBottomPiece<T>(string guid, string rulebookName, string rulebookDescription, Texture icon) where T : TotemTriggerReceiver
     {
-        public static void Postfix(ResourceBank __instance)
+        if (icon == null)
         {
-            // The resource bank has been cleared. refill it
-            if (ResourceBank.Get<GameObject>(CustomTotemTopResourcePath) == null)
-                Initialize();
+            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{rulebookName}. Texture is null!");
+            return null;
         }
-    }
 
-    [HarmonyPatch(typeof(Totem), "GetTopPiecePrefab", new Type[] { typeof(TotemTopData) })]
-    private class Totem_GetTopPiecePrefab
-    {
-        public static bool Prefix(Totem __instance, TotemTopData data, ref GameObject __result)
+        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, rulebookName);
+        return Add(new CustomTotemBottom()
         {
-            if (TribeManager.IsCustomTribe(data.prerequisites.tribe))
-            {
-                CustomTotemTop customTribeTotem = totemTops.Find((a) => a.Tribe == data.prerequisites.tribe);
-                if (customTribeTotem != null)
-                {
-                    // Get custom totem model
-                    __result = customTribeTotem.Prefab;
-                }
-                else
-                {
-                    // No custom totem model - use default model
-                    __result = defaultTotemTop.Prefab;
-                }
-                return false;
-            }
-            else if (InscryptionAPIPlugin.configCustomTotemTopTypes.Value == TotemTopState.AllTribes)
-            {
-                __result = defaultTotemTop.Prefab;
-                return false;
-            }
-
-            return true;
-        }
-    }
-
-    [HarmonyPatch(typeof(Totem), "SetData", new Type[] { typeof(ItemData) })]
-    private class Totem_SetData
-    {
-        public static void Postfix(Totem __instance, ItemData data)
-        {
-            __instance.topPieceParent.GetComponentInChildren<CompositeTotemPiece>().SetData(__instance.TotemItemData.top);
-        }
-    }
-
-    [HarmonyPatch(typeof(TotemTopData), "PrefabId", MethodType.Getter)]
-    private class TotemTopData_PrefabId
-    {
-        public static bool Prefix(TotemTopData __instance, ref string __result)
-        {
-            // Custom totem tops will always use the fallback UNLESS there is an override
-            if (TribeManager.IsCustomTribe(__instance.prerequisites.tribe))
-            {
-                CustomTotemTop customTribeTotem = totemTops.Find((a) => a.Tribe == __instance.prerequisites.tribe);
-                if (customTribeTotem == null)
-                {
-                    __result = CustomTotemTopID;
-                    return false;
-                }
-            }
-            else if (InscryptionAPIPlugin.configCustomTotemTopTypes.Value == TotemTopState.AllTribes)
-            {
-                // All non-custom tribes will use the fallback model 
-                __result = CustomTotemTopID;
-                return false;
-            }
-
-            return true;
-        }
+            EffectID = id,
+            RulebookName = rulebookName,
+            RulebookDescription = rulebookDescription,
+            GUID = guid,
+            Icon = icon,
+            Prefab = DefaultTotemBottom,
+            TriggerReceiver = typeof(T)
+        });
     }
 
     [Obsolete("Deprecated. Use NewTopPiece<T> instead.")]
@@ -214,11 +102,27 @@ public static class TotemManager
         return totem;
     }
 
-    private const string CustomTotemTopID = "TotemPieces/TotemTop_Custom";
-    private const string CustomTotemTopResourcePath = "Prefabs/Items/" + CustomTotemTopID;
+    private static CustomTotemBottom Add(CustomTotemBottom totem)
+    {
+        totemBottoms.Add(totem);
+        
+        TotemBottomEffect totemBottomEffect = (TotemBottomEffect)Activator.CreateInstance(totem.Effect);
+        totemBottomEffect.EffectID = totem.EffectID;
+        allBottomEffects.Add(totemBottomEffect);
+        return totem;
+    }
 
-    private static CustomTotemTop defaultTotemTop = null;
-    private readonly static List<CustomTotemTop> totemTops = new();
+    internal const string CustomTotemTopID = "TotemPieces/TotemTop_Custom";
+    internal const string CustomTotemBottomID = "TotemPieces/TotemBottom_CardGainAbility";
+    internal const string CustomTotemTopResourcePath = "Prefabs/Items/" + CustomTotemTopID;
+    internal const string CustomTotemBottomResourcePath = "Prefabs/Items/" + CustomTotemBottomID;
+
+    internal static CustomTotemTop defaultTotemTop = null;
+    internal readonly static List<CustomTotemTop> totemTops = new();
+    
+    internal static GameObject defaultTotemBottom = null;
+    internal static List<TotemBottomEffect> allBottomEffects = new();
+    internal readonly static List<CustomTotemBottom> totemBottoms = new();
 
     /// <summary>
     /// A collection of all new totem tops added using the API.
@@ -229,6 +133,30 @@ public static class TotemManager
     /// Totem top that is used for custom tribes if no custom model is provided
     /// </summary>
     public static CustomTotemTop DefaultTotemTop => defaultTotemTop;
+    
+    /// <summary>
+    /// Vanilla model
+    /// </summary>
+    public static GameObject DefaultTotemBottom
+    {
+        get
+        {
+            if (defaultTotemBottom == null)
+                defaultTotemBottom = GetDefaultTotemBottom();
+            return defaultTotemBottom;
+        }
+    }
+    private static GameObject GetDefaultTotemBottom()
+    {
+        byte[] resourceBytes = TextureHelper.GetResourceBytes("customtotembottom", typeof(InscryptionAPIPlugin).Assembly);
+        if (AssetBundleHelper.TryGet(resourceBytes, "CustomTotemBottom", out GameObject go))
+        {
+            return go;
+        }
+        
+        InscryptionAPIPlugin.Logger.LogError($"Unable to load CustomTotemBottom model");
+        return Resources.Load<GameObject>(CustomTotemBottomResourcePath);
+    }
 
     [Obsolete("Obsolete. Use SetDefaultTotemTop<T> instead to ensure the totem top is set up correctly.")]
     public static void SetDefaultTotemTop(GameObject gameObject)
@@ -265,14 +193,16 @@ public static class TotemManager
         }
     }
 
-    private static void Initialize()
+    internal static void Initialize()
     {
         // Don't change any totems!
         if (InscryptionAPIPlugin.configCustomTotemTopTypes.Value == TotemTopState.Vanilla)
             return;
 
         if (defaultTotemTop == null)
+        {
             InitializeDefaultTotemTop();
+        }
 
         // Add all totem tops to the game
         foreach (CustomTotemTop totem in totemTops)
@@ -299,12 +229,95 @@ public static class TotemManager
             });
         }
 
+        // Add all totem bottoms to the game
+        foreach (CustomTotemBottom totem in totemBottoms)
+        {
+            InscryptionAPIPlugin.Logger.LogError($"Adding {totem.RulebookName} {totem.EffectID}");
+            GameObject prefab = totem.Prefab;
+            if (prefab == null)
+            {
+                InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {totem.GUID}.{totem.RulebookName}. Prefab is null!");
+                continue;
+            }
+            
+            if (prefab == DefaultTotemBottom)
+            {
+                prefab = UnityObject.Instantiate(prefab);
+                totem.Prefab = prefab;
+            }
+
+            // Attach missing components
+            SetupTotemBottomPrefab(prefab, totem.CompositeType);
+
+            InscryptionAPIPlugin.Logger.LogError($"Adding to bank");
+            
+            // Add to resources so it can be part of the pool
+            ResourceBank.instance.resources.Add(new ResourceBank.Resource()
+            {
+                path = "Prefabs/Items/TotemPieces/TotemBottom_" + totem.EffectID,
+                asset = prefab
+            });
+        }
     }
-    private static void SetupTotemTopPrefab(GameObject prefab, Type scriptType)
+    
+    private static void SetupTotemTopPrefab(GameObject prefab, Type compositeType)
     {
         // Add require components in case the prefab doesn't have them
         if (prefab.GetComponent<CompositeTotemPiece>() == null)
-            prefab.AddComponent(scriptType);
+        {
+            prefab.AddComponent(compositeType);
+        }
+
+        if (prefab.GetComponent<Animator>() == null)
+        {
+            Animator addComponent = prefab.AddComponent<Animator>();
+            addComponent.runtimeAnimatorController = Resources.Load<RuntimeAnimatorController>("animation/items/ItemAnim");
+            addComponent.Rebind();
+        }
+
+        // Mark as dont destroy on load so it doesn't get removed between levels
+        UnityObject.DontDestroyOnLoad(prefab);
+    }
+
+    
+    
+    public static CustomTotemsSaveData RunStateCustomTotems
+    {
+        get
+        {
+            string json = ModdedSaveManager.RunState.GetValue(InscryptionAPIPlugin.ModGUID, "CustomTotemBottoms");
+            if (string.IsNullOrEmpty(json))
+            {
+                return new CustomTotemsSaveData();
+            }
+
+            CustomTotemsSaveData data = SaveManager.FromJSON<CustomTotemsSaveData>(json);
+            return data;
+        }
+        set
+        {
+            string json = value == null ? null : SaveManager.ToJSON(value);
+            ModdedSaveManager.RunState.SetValue(InscryptionAPIPlugin.ModGUID, "CustomTotemBottoms", json);
+        }
+    }
+    
+    private static void SetupTotemBottomPrefab(GameObject prefab, Type compositeType)
+    {
+        // Add require components in case the prefab doesn't have them
+        if (!prefab.TryGetComponent(out CompositeTotemPiece t) || t.GetType() != compositeType)
+        {
+            InscryptionAPIPlugin.Logger.LogInfo($"CompositeTotemPiece count {prefab.GetComponents<CompositeTotemPiece>().Length}");
+            if (t != null)
+            {
+                InscryptionAPIPlugin.Logger.LogError($"Removing CompositeTotemPiece from " + prefab);
+                UnityObject.Destroy(t);
+                InscryptionAPIPlugin.Logger.LogInfo($"CompositeTotemPiece count {prefab.GetComponents<CompositeTotemPiece>().Length}");
+            }
+            prefab.AddComponent(compositeType);
+            InscryptionAPIPlugin.Logger.LogInfo($"SetupTotemBottomPrefab data {compositeType}");
+        }
+        
+        InscryptionAPIPlugin.Logger.LogInfo($"CompositeTotemPiece count {prefab.GetComponents<CompositeTotemPiece>().Length}");
 
         if (prefab.GetComponent<Animator>() == null)
         {
@@ -324,5 +337,38 @@ public static class TotemManager
         public Type Type = typeof(CustomIconTotemTopPiece);
         public GameObject Prefab;
         public Tribe Tribe;
+    }
+
+    public class CustomTotemBottom
+    {
+        public string PrefabID => GUID + "_" + RulebookName;
+        
+        public string GUID;
+        public string RulebookName;
+        public string RulebookDescription;
+        public TotemEffect EffectID;
+        public GameObject Prefab;
+        public Texture Icon;
+        public Type CompositeType = typeof(CustomIconTotemBottomPiece);
+        public Type Effect = typeof(TotemBottomEffect);
+        public Type TriggerReceiver = null;
+
+        public CustomTotemBottom SetTriggerReceiverType(Type type)
+        {
+            TriggerReceiver = type;
+            return this;
+        }
+
+        public CustomTotemBottom SetCompositeTotemPieceType(Type type)
+        {
+            CompositeType = type;
+            return this;
+        }
+
+        public CustomTotemBottom SetEffectType(Type type)
+        {
+            Effect = type;
+            return this;
+        }
     }
 }
