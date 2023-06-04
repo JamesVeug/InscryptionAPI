@@ -2,6 +2,7 @@ using DiskCardGame;
 using InscryptionAPI.Helpers;
 using System.Collections.ObjectModel;
 using InscryptionAPI.Guid;
+using InscryptionAPI.Rulebook;
 using InscryptionAPI.Saves;
 using UnityEngine;
 
@@ -39,7 +40,7 @@ public static class TotemManager
         });
     }
 
-    public static CustomTotemBottom NewBottomPiece<T>(string guid, string rulebookName, string rulebookDescription, Texture icon) where T : TotemTriggerReceiver
+    public static CustomTotemBottom NewBottomPiece<T>(string guid, string rulebookName, string rulebookDescription, Texture2D icon) where T : TotemTriggerReceiver
     {
         if (icon == null)
         {
@@ -109,6 +110,8 @@ public static class TotemManager
         TotemBottomEffect totemBottomEffect = (TotemBottomEffect)Activator.CreateInstance(totem.Effect);
         totemBottomEffect.EffectID = totem.EffectID;
         allBottomEffects.Add(totemBottomEffect);
+
+        RuleBookManager.New<TotemRulebookData>(InscryptionAPIPlugin.ModGUID, "Totem Bottoms");
         return totem;
     }
 
@@ -348,7 +351,7 @@ public static class TotemManager
         public string RulebookDescription;
         public TotemEffect EffectID;
         public GameObject Prefab;
-        public Texture Icon;
+        public Texture2D Icon;
         public Type CompositeType = typeof(CustomIconTotemBottomPiece);
         public Type Effect = typeof(TotemBottomEffect);
         public Type TriggerReceiver = null;

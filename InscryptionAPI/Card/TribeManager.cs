@@ -139,34 +139,6 @@ public class TribeManager
         __result = list2;
         return false;
     }
-    
-    [HarmonyPatch(typeof(RuleBookInfo), nameof(RuleBookInfo.ConstructPageData))]
-    [HarmonyPostfix]
-    private static void ConstructPageData(ref List<RuleBookPageInfo> __result, RuleBookInfo __instance, AbilityMetaCategory metaCategory)
-    {
-        if (metaCategory != AbilityMetaCategory.Part1Rulebook)
-        {
-            return;
-        }
-
-        GameObject rangePrefab = __instance.pageRanges.Find((a) => a.type == PageRangeType.Items).rangePrefab;
-        GameObject tribePrefab = GameObject.Instantiate(rangePrefab, rangePrefab.transform.parent);
-        ItemPage itemPage = tribePrefab.GetComponent<ItemPage>();
-        TribePage tribePage = tribePrefab.AddComponent<TribePage>();
-        tribePage.iconRenderer = itemPage.iconRenderer;
-        tribePage.nameTextMesh = itemPage.nameTextMesh;
-        tribePage.descriptionTextMesh = itemPage.descriptionTextMesh;
-        UnityObject.Destroy(itemPage);
-        
-        foreach (TribeInfo tribe in allTribes)
-        {
-            RuleBookPageInfo info = new();
-            info.pageId = tribe.tribe.ToString();
-            info.pagePrefab = tribePrefab;
-            info.headerText = string.Format(Localization.Translate("APPENDIX XIII, SUBSECTION I - TRIBES {0}"), __result.Count);
-            __result.Add(info);
-        }
-    }
 
     /// <summary>
     /// Adds a new tribe to the game
@@ -273,5 +245,24 @@ public class TribeManager
         public Texture2D cardback;
         public string rulebookName;
         public string rulebookDescription;
+    }
+
+    public class TribeIconInteractable : AlternateInputInteractable
+    {
+        public override CursorType CursorType => CursorType.Inspect;
+        
+        public Tribe tribe;
+
+        private void Awake()
+        {
+            if (gameObject.GetComponent<Collider>() == null)
+            {
+                gameObject.AddComponent<BoxCollider>();
+            }
+        }
+        public override void OnAlternateSelectStarted()
+        {
+            RuleBookManager.OpenRulebookToCustomPage(RuleBookManager.TribeRulebookPage, tribe.ToString(), false);
+        }
     }
 }

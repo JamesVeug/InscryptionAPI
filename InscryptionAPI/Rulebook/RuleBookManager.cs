@@ -2,48 +2,87 @@
 using System.Reflection.Emit;
 using DiskCardGame;
 using HarmonyLib;
+using InscryptionAPI.Guid;
+using InscryptionAPI.Helpers;
+using UnityEngine;
 
 namespace InscryptionAPI.Rulebook;
 
 [HarmonyPatch]
 public static class RuleBookManager
 {
-    public abstract class CustomRulebookPage
-    {
-        public abstract int numPages { get; }
-        
-        public abstract bool ShouldBeAdded(int index, AbilityMetaCategory metaCategory);
-        public abstract void CreatePage(RuleBookPageInfo page, PageRangeInfo pageRange, int index);
-    }
-    
     public class CustomRulebookSection
     {
         public string PluginGUID;
-        public string RulebookName;
+        public string SectionName;
         public PageRangeInfo PageRangeInfo;
         public Type PageType;
-        public CustomRulebookPage CustomPageType;
+        public CustomRulebookSectionData CustomPageType;
     }
     
+    public static readonly PageRangeType TribeRulebookPage;
+    
     internal static readonly List<CustomRulebookSection> newPages = new();
+    private static readonly GenericRulebookPage fallbackPagePrefab = null;
 
     static RuleBookManager()
     {
-        New<TribeRulebookPage>(InscryptionAPIPlugin.ModGUID, "Tribes");
+        GameObject fallbackPage = Resources.Load<GameObject>("prefabs/rulebook/pagecontent/ItemPageContent");
+        ItemPage itemPage = fallbackPage.GetComponent<ItemPage>();
+        fallbackPagePrefab = fallbackPage.AddComponent<GenericRulebookPage>();
+        fallbackPagePrefab.iconRenderer = itemPage.iconRenderer;
+        fallbackPagePrefab.nameTextMesh = itemPage.nameTextMesh;
+        fallbackPagePrefab.descriptionTextMesh = itemPage.descriptionTextMesh;
+        UnityObject.Destroy(itemPage);
+        GameObject.DontDestroyOnLoad(fallbackPage);
+        fallbackPage.SetActive(false);
+        
+        
+        TribeRulebookPage = New<TribeRulebookData>(InscryptionAPIPlugin.ModGUID, "Tribes").PageRangeInfo.type;
     }
 
-    public static CustomRulebookSection New<T>(string PluginGUID, string rulebookName, PageRangeInfo pageRangeInfo,) where T : CustomRulebookPage
+    public static CustomRulebookSection New<T, Y>(string guid, string sectionName, GameObject pagePrefab=null) 
+        where T : CustomRulebookSectionData
+        where Y : RuleBookPage
     {
+        PageRangeType pageRangeType = GuidManager.GetEnumValue<PageRangeType>(guid, sectionName);
+        GameObject prefab = pagePrefab != null ? pagePrefab : fallbackPagePrefab.gameObject;
+        
         CustomRulebookSection section = new CustomRulebookSection
         {
-            PluginGUID = PluginGUID,
-            RulebookName = rulebookName,
-            PageRangeInfo = ,
-            PageType = null,
-            CustomPageType = null
+            PluginGUID = guid,
+            SectionName = sectionName,
+            PageRangeInfo = new PageRangeInfo()
+            {
+                rangePrefab = prefab,
+                type = pageRangeType,
+            },
+            PageType = typeof(Y),
+            CustomPageType = Activator.CreateInstance<T>()
         };
-        
+
+        newPages.Add(section);
+        return section;
     }
+
+    public static CustomRulebookSection New<T>(string guid, string sectionName) where T : CustomRulebookSectionData
+    {
+        return New<T, GenericRulebookPage>(guid, sectionName);
+    }
+    
+    public static void OpenRulebookToCustomPage(PageRangeType rangeType, string pageID, bool offsetView=false)
+    {
+        RuleBookController ruleBookController = RuleBookController.Instance;
+        ruleBookController.SetShown(shown: true, offsetView: offsetView);
+
+        string page = rangeType + "_" + pageID;
+        List<RuleBookPageInfo> pageData = ruleBookController.PageData;
+        int pageIndex = pageData.IndexOf(pageData.Find((RuleBookPageInfo x) => !string.IsNullOrEmpty(x.pageId) && x.pageId == page));
+        ruleBookController.StopAllCoroutines();
+        ruleBookController.StartCoroutine(ruleBookController.flipper.FlipToPage(pageIndex, 0.2f));
+    }
+    
+#region patches
     
     [HarmonyPatch(typeof(PageContentLoader), nameof(PageContentLoader.LoadPage), new Type[]{typeof(RuleBookPageInfo)})]
     internal class PageContentLoader_LoadPage
@@ -116,10 +155,20 @@ public static class RuleBookManager
             {
                 if (newPage.PageType == component.GetType())
                 {
-                    component.FillPage(pageInfo.headerText, new object[]
+                    if (component is GenericRulebookPage)
                     {
-                        pageInfo.pageId
-                    });
+                        component.FillPage(pageInfo.headerText, new object[]
+                        {
+                            newPage.PageRangeInfo.type, pageInfo.pageId // Populated in CustomRulebookSectionData.CreatePage
+                        });
+                    }
+                    else
+                    {
+                        component.FillPage(pageInfo.headerText, new object[]
+                        {
+                            pageInfo.pageId // Populated in CustomRulebookSectionData.CreatePage
+                        });
+                    }
                     return true;
                 }
             }
@@ -136,48 +185,19 @@ public static class RuleBookManager
             RuleBookInfo instanceBookInfo = RuleBookController.Instance.bookInfo;
             foreach (CustomRulebookSection page in newPages)
             {
+                InscryptionAPIPlugin.Logger.LogInfo(page.SectionName);
                 totalCategories++;
-                List<RuleBookPageInfo> pages = instanceBookInfo.ConstructPages(page.PageRangeInfo, page.numPages, 0, (int index) =>
+                List<RuleBookPageInfo> pages = instanceBookInfo.ConstructPages(page.PageRangeInfo, page.CustomPageType.numPages, 0, (int index) =>
                 {
-                    return page.ShouldBeAdded(index, metaCategory);
-                }, page.CreatePage, "APPENDIX XII, SUBSECTION " + ConvertToRomanNumeral(totalCategories) + " - " + page.rulebookName + " {0}");
+                    return page.CustomPageType.ShouldBeAdded(index, metaCategory);
+                }, (a, b, index) =>
+                {
+                    a.pageId = page.PageRangeInfo.type + "_" + page.CustomPageType.GetPageID(index);
+                }, "APPENDIX XII, SUBSECTION " + GeneralHelpers.ConvertToRomanNumeral(totalCategories) + " - " + page.SectionName + " {0}");
                 __result.AddRange(pages);
             }
         }
-
-        public static string ConvertToRomanNumeral(int number)
-        {
-            if (number < 1 || number > 3999)
-            {
-                throw new ArgumentOutOfRangeException("number", "Number must be between 1 and 3999.");
-            }
-    
-            // Define arrays to hold the Roman numeral symbols and their corresponding values.
-            string[] symbols = { "M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I" };
-            int[] values = { 1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1 };
-    
-            // Initialize an empty string to hold the Roman numeral.
-            string result = "";
-    
-            // Loop through the arrays, subtracting the values until the number is reduced to zero.
-            for (int i = 0; i < values.Length; i++)
-            {
-                while (number >= values[i])
-                {
-                    result += symbols[i];
-                    number -= values[i];
-                }
-            }
-    
-            return result;
-        }
     }
     
-    public static void OpenRulebookToTribePage(this RuleBookController instance, string tribeName, PlayableCard card, bool immediate = false)
-    {
-        instance.SetShown(true, instance.OffsetViewForCard(card));
-        int pageIndex = instance.PageData.IndexOf(instance.PageData.Find((RuleBookPageInfo x) => x.pageId == tribeName));
-        instance.StopAllCoroutines();
-        instance.StartCoroutine(instance.flipper.FlipToPage(pageIndex, immediate ? 0f : 0.2f));
-    }
+#endregion
 }

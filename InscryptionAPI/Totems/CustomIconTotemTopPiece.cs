@@ -1,6 +1,7 @@
 ﻿using DiskCardGame;
 using InscryptionAPI.Card;
 using InscryptionAPI.Helpers.Extensions;
+using InscryptionAPI.Rulebook;
 using UnityEngine;
 
 namespace InscryptionAPI.Totems;
@@ -26,6 +27,7 @@ public class CustomIconTotemTopPiece : CompositeTotemPiece
             if (emissiveRenderer != null)
             {
                 emissiveRenderer.material.mainTexture = texture2D;
+                InitializeInteractable();
             }
             else
             {
@@ -35,6 +37,19 @@ public class CustomIconTotemTopPiece : CompositeTotemPiece
         else
         {
             InscryptionAPIPlugin.Logger.LogError($"Could not find Icon GameObject to assign tribe icon or emission!");
+        }
+    }
+
+    public void InitializeInteractable()
+    {
+        if (!emissiveRenderer.TryGetComponent(out AlternateInputInteractable interactable))
+        {
+            interactable = emissiveRenderer.gameObject.AddComponent<TribeManager.TribeIconInteractable>();
+        }
+
+        if (interactable is TribeManager.TribeIconInteractable tribeIconInteractable)
+        {
+            tribeIconInteractable.tribe = ((TotemTopData)Data).prerequisites.tribe;
         }
     }
 }
