@@ -22,7 +22,7 @@ public static class AbilityManager
         public readonly Dictionary<Type, object> TypeMap = new();
         public readonly Dictionary<string, string> StringMap = new();
     }
-    private static ConditionalWeakTable<AbilityInfo, AbilityExt> AbilityExtensionProperties = new();
+    private static readonly ConditionalWeakTable<AbilityInfo, AbilityExt> AbilityExtensionProperties = new();
 
     /// <summary>
     /// A utility class that holds all of the required information about an ability in order to be able to use it in-game.
@@ -33,6 +33,11 @@ public static class AbilityManager
         /// The unique ID for this ability
         /// </summary>
         public readonly Ability Id;
+        
+        /// <summary>
+        /// The guid of the mod that added this ability
+        /// </summary>
+        public readonly string ModGUID;
 
         /// <summary>
         /// The description object for this ability
@@ -67,8 +72,22 @@ public static class AbilityManager
         /// <param name="info">The description object for this ability</param>
         /// <param name="behaviour">A subclass of AbilityBehaviour that implements the logic for the ability</param>
         /// <param name="texture">A 49x49 texture  for the ability icon</param>
-        public FullAbility(Ability id, AbilityInfo info, Type behaviour, Texture texture)
+        [Obsolete("Use the constructor that takes a modGUID parameter instead")]
+        public FullAbility(Ability id, AbilityInfo info, Type behaviour, Texture texture) : this("", id, info, behaviour, texture)
         {
+        }
+
+        /// <summary>
+        /// Creates a new instance of FullAbility and registers its behaviour type with the [TypeManager](InscryptionAPI.Guid.TypeManager).
+        /// </summary>
+        /// <param name="modGUID">The GUID of the mod that added this</param>
+        /// <param name="id">The unique ID for this ability</param>
+        /// <param name="info">The description object for this ability</param>
+        /// <param name="behaviour">A subclass of AbilityBehaviour that implements the logic for the ability</param>
+        /// <param name="texture">A 49x49 texture  for the ability icon</param>
+        public FullAbility(string modGUID, Ability id, AbilityInfo info, Type behaviour, Texture texture)
+        {
+            ModGUID = modGUID;
             Id = id;
             Info = info;
             AbilityBehavior = behaviour;
@@ -111,7 +130,7 @@ public static class AbilityManager
 
             AbilityExtensionProperties.Add(clonedInfo, AbilityExtensionProperties.GetOrCreateValue(Info));
 
-            return new FullAbility(this.Id, clonedInfo, this.AbilityBehavior, this.Texture) { CustomFlippedTexture = this.CustomFlippedTexture };
+            return new FullAbility(this.ModGUID, this.Id, clonedInfo, this.AbilityBehavior, this.Texture) { CustomFlippedTexture = this.CustomFlippedTexture };
         }
     }
 
@@ -166,6 +185,7 @@ public static class AbilityManager
     /// </remarks>
     public static event Func<List<FullAbility>, List<FullAbility>> ModifyAbilityList;
 
+    public static AbilityMetaCategory Part2Modular => GuidManager.GetEnumValue<AbilityMetaCategory>(InscryptionAPIPlugin.ModGUID, "Part2Modular");
     /// <summary>
     /// Resynchronizes the ablity list.
     /// </summary>
@@ -211,14 +231,19 @@ public static class AbilityManager
         foreach (var ability in Resources.LoadAll<AbilityInfo>("Data/Abilities"))
         {
             var name = ability.ability.ToString();
+            if (ability.activated || ability.metaCategories.Exists(x => x == AbilityMetaCategory.Part1Modular || x == AbilityMetaCategory.Part3Modular))
+                ability.SetDefaultPart2Ability();
+
             baseGame.Add(new FullAbility
             (
+                null,
                 ability.ability,
                 ability,
                 gameAsm.GetType($"DiskCardGame.{name}"),
                 useReversePatch ? OriginalLoadAbilityIcon(name) : AbilitiesUtil.LoadAbilityIcon(name)
             ));
         }
+
         return baseGame;
     }
 
@@ -240,7 +265,7 @@ public static class AbilityManager
     /// ablity ID yourself and leave it as its default value.</remarks>
     public static FullAbility Add(string guid, AbilityInfo info, Type behavior, Texture tex)
     {
-        FullAbility full = new(GuidManager.GetEnumValue<Ability>(guid, info.rulebookName), info, behavior, tex);
+        FullAbility full = new(guid, GuidManager.GetEnumValue<Ability>(guid, info.rulebookName), info, behavior, tex);
         full.Info.ability = full.Id;
         info.name = $"{guid}_{info.rulebookName}";
         NewAbilities.Add(full);
@@ -378,20 +403,22 @@ public static class AbilityManager
     [HarmonyPrefix, HarmonyPatch(typeof(RuleBookController), nameof(RuleBookController.OpenToAbilityPage))]
     private static bool UpdateRulebookDescription(PlayableCard card)
     {
-        if (card != null)
+        if (!card)
+            return true;
+
+        ExtendedActivatedAbilityBehaviour component = card.GetComponent<ExtendedActivatedAbilityBehaviour>();
+        if (component != null)
         {
-            ExtendedActivatedAbilityBehaviour component = card.GetComponent<ExtendedActivatedAbilityBehaviour>();
-            if (component != null)
+            foreach (FullAbility ab in AllAbilities.Where(ai => ai.Info.activated && card.HasAbility(ai.Id)))
             {
-                foreach (FullAbility ab in AllAbilities.Where(ai => ai.Info.activated && card.HasAbility(ai.Id)))
-                {
-                    if (ab.AbilityBehavior.IsAssignableFrom(component.GetType()))
-                        ab.Info.rulebookDescription = ParseAndUpdateDescription(ab.Info.rulebookDescription, component);
-                }
+                if (ab.AbilityBehavior.IsAssignableFrom(component.GetType()))
+                    ab.Info.rulebookDescription = ParseAndUpdateDescription(ab.Info.rulebookDescription, component);
             }
         }
+
         return true;
     }
+
     [HarmonyPrefix, HarmonyPatch(typeof(RuleBookController), nameof(RuleBookController.SetShown))]
     private static bool ResetAlteredDescriptions(bool shown)
     {
@@ -401,11 +428,12 @@ public static class AbilityManager
             {
                 AbilityInfo info = AbilitiesUtil.GetInfo(ab.Id);
                 if (info.rulebookDescription != ab.BaseRulebookDescription)
-                    info.rulebookDescription = ab.BaseRulebookDescription;
+                    info.ResetDescription();
             }
         }
         return true;
     }
+
     internal static string ParseAndUpdateDescription(string description, ExtendedActivatedAbilityBehaviour ability)
     {
         while (description.Contains("[sigilcost:"))
@@ -500,28 +528,30 @@ public static class AbilityManager
     private static void FixRulebook(AbilityMetaCategory metaCategory, RuleBookInfo __instance, ref List<RuleBookPageInfo> __result)
     {
         //InscryptionAPIPlugin.Logger.LogInfo($"In rulebook patch: I see {NewAbilities.Count}");
-        if (NewAbilities.Count > 0)
+        if (NewAbilities.Count <= 0)
+            return;
+
+        foreach (PageRangeInfo pageRangeInfo in __instance.pageRanges)
         {
-            foreach (PageRangeInfo pageRangeInfo in __instance.pageRanges)
+            // regular abilities
+            if (pageRangeInfo.type != PageRangeType.Abilities)
+                continue;
+
+            int insertPosition = __result.FindLastIndex(rbi => rbi.pagePrefab == pageRangeInfo.rangePrefab) + 1;
+            int curPageNum = (int)Ability.NUM_ABILITIES;
+            List<FullAbility> abilitiesToAdd = NewAbilities.Where(x => __instance.AbilityShouldBeAdded((int)x.Id, metaCategory)).ToList();
+            //InscryptionAPIPlugin.Logger.LogInfo($"Adding {abilitiesToAdd.Count} out of {NewAbilities.Count} abilities to rulebook");
+            foreach (FullAbility fab in abilitiesToAdd)
             {
-                // regular abilities
-                if (pageRangeInfo.type == PageRangeType.Abilities)
+                RuleBookPageInfo info = new()
                 {
-                    int insertPosition = __result.FindLastIndex(rbi => rbi.pagePrefab == pageRangeInfo.rangePrefab) + 1;
-                    int curPageNum = (int)Ability.NUM_ABILITIES;
-                    List<FullAbility> abilitiesToAdd = NewAbilities.Where(x => __instance.AbilityShouldBeAdded((int)x.Id, metaCategory)).ToList();
-                    //InscryptionAPIPlugin.Logger.LogInfo($"Adding {abilitiesToAdd.Count} out of {NewAbilities.Count} abilities to rulebook");
-                    foreach (FullAbility fab in abilitiesToAdd)
-                    {
-                        RuleBookPageInfo info = new();
-                        info.pagePrefab = pageRangeInfo.rangePrefab;
-                        info.headerText = string.Format(Localization.Translate("APPENDIX XII, SUBSECTION I - MOD ABILITIES {0}"), curPageNum);
-                        __instance.FillAbilityPage(info, pageRangeInfo, (int)fab.Id);
-                        __result.Insert(insertPosition, info);
-                        curPageNum += 1;
-                        insertPosition += 1;
-                    }
-                }
+                    pagePrefab = pageRangeInfo.rangePrefab,
+                    headerText = string.Format(Localization.Translate("APPENDIX XII, SUBSECTION I - MOD ABILITIES {0}"), curPageNum)
+                };
+                __instance.FillAbilityPage(info, pageRangeInfo, (int)fab.Id);
+                __result.Insert(insertPosition, info);
+                curPageNum += 1;
+                insertPosition += 1;
             }
         }
     }

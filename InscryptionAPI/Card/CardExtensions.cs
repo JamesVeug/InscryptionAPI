@@ -1,7 +1,10 @@
 using DiskCardGame;
+using GBC;
 using InscryptionAPI.Helpers;
 using Sirenix.Utilities;
 using System.Collections;
+using System.Reflection;
+using HarmonyLib;
 using UnityEngine;
 
 namespace InscryptionAPI.Card;
@@ -20,7 +23,6 @@ public static class CardExtensions
     {
         return portrait.ConvertTexture(spriteType, filterMode ?? FilterMode.Point);
     }
-
 
     #region Adders
 
@@ -141,6 +143,86 @@ public static class CardExtensions
                 info.tribes.Add(app);
         return info;
     }
+    
+    /// <summary>
+    /// Returns the blood cost of a card.
+    /// This function can be overriden if someone wants to inject new cost into a cards blood cost
+    /// </summary>
+    public static int BloodCost(this PlayableCard card)
+    {
+        if (card && card.Info)
+        {
+            int originalBloodCost = CostProperties.CostProperties.OriginalBloodCost(card.Info);
+
+            if (IsGemified(card))
+            {
+                originalBloodCost--;
+            }
+            
+            return originalBloodCost;
+        } 
+        
+        InscryptionAPIPlugin.Logger.LogError("[BloodCost] Couldn't find Card or CardInfo for blood cost??? How is this possible?");
+        return 0;
+    }
+    
+    
+    /// <summary>
+    /// Returns the bone cost of a card.
+    /// This function can be overriden if someone wants to inject new cost into a cards bone cost
+    /// </summary>
+    public static int BonesCost(this PlayableCard card)
+    {
+        if (card && card.Info)
+        {
+            return CostProperties.CostProperties.OriginalBonesCost(card.Info);
+        } 
+        
+        InscryptionAPIPlugin.Logger.LogError("Couldn't find Card or CardInfo for bone cost??? How is this possible?");
+        return 0;
+    }
+    
+    
+    /// <summary>
+    /// Returns the gem cost of a card.
+    /// This function can be overriden if someone wants to inject new cost into a cards gem cost
+    /// </summary>
+    public static List<GemType> GemsCost(this PlayableCard card)
+    {
+        List<CardModificationInfo> mods = card.TemporaryMods.Concat(card.Info.Mods).ToList();
+        if (mods.Exists((CardModificationInfo x) => x.nullifyGemsCost))
+        {
+            return new List<GemType>();
+        }
+        
+        List<GemType> gemsCost = new(card.Info.gemsCost);
+        foreach (CardModificationInfo mod in mods)
+        {
+            if (mod.addGemCost == null)
+            {
+                continue;
+            }
+            foreach (GemType item in mod.addGemCost)
+            {
+                if (!gemsCost.Contains(item))
+                {
+                    gemsCost.Add(item);
+                }
+            }
+        }
+        
+        if (gemsCost.Count > 0 && Singleton<ResourcesManager>.Instance.HasGem(GemType.Blue) && IsGemified(card))
+        {
+            gemsCost.RemoveAt(0);
+        }
+
+        return gemsCost;
+    }
+    
+    public static bool IsGemified(this PlayableCard card)
+    {
+        return card.TemporaryMods.Exists((CardModificationInfo x) => x.gemify) || card.Info.Gemified;
+    }
 
     #endregion
 
@@ -213,6 +295,44 @@ public static class CardExtensions
             {
                 if (info.IsOfTribe(tr))
                     info.tribes.Remove(tr);
+            }
+        }
+        return info;
+    }
+
+    /// <summary>
+    /// Removes any number of CardMetaCategories from the card.
+    /// </summary>
+    /// <param name="info">Card to access.</param>
+    /// <param name="cardMetaCategories">The CardMetaCategories to remove.</param>
+    /// <returns>The same card info so a chain can continue.</returns>
+    public static CardInfo RemoveCardMetaCategories(this CardInfo info, params CardMetaCategory[] cardMetaCategories)
+    {
+        if (info.metaCategories?.Count > 0)
+        {
+            foreach (CardMetaCategory cm in cardMetaCategories)
+            {
+                if (info.HasCardMetaCategory(cm))
+                    info.metaCategories.Remove(cm);
+            }
+        }
+        return info;
+    }
+
+    /// <summary>
+    /// Removes any number of Appearances from the card.
+    /// </summary>
+    /// <param name="info">Card to access.</param>
+    /// <param name="appearances">The Appearances to remove.</param>
+    /// <returns>The same card info so a chain can continue.</returns>
+    public static CardInfo RemoveAppearances(this CardInfo info, params CardAppearanceBehaviour.Appearance[] appearances)
+    {
+        if (info.appearanceBehaviour?.Count > 0)
+        {
+            foreach (CardAppearanceBehaviour.Appearance ap in appearances)
+            {
+                if (info.appearanceBehaviour.Contains(ap))
+                    info.appearanceBehaviour.Remove(ap);
             }
         }
         return info;
@@ -387,7 +507,7 @@ public static class CardExtensions
 
         return info;
     }
-    
+
     #region MetaCategories
 
     /// <summary>
@@ -460,10 +580,12 @@ public static class CardExtensions
     /// </summary>
     /// <param name="info">CardInfo to access.</param>
     /// <returns>The same CardInfo so a chain can continue.</returns>
-    public static CardInfo SetTerrain(this CardInfo info)
+    public static CardInfo SetTerrain(this CardInfo info, bool useTerrainLayout = true)
     {
         info.AddTraits(Trait.Terrain);
-        info.AddAppearances(CardAppearanceBehaviour.Appearance.TerrainBackground, CardAppearanceBehaviour.Appearance.TerrainLayout);
+        info.AddAppearances(CardAppearanceBehaviour.Appearance.TerrainBackground);
+        if (useTerrainLayout)
+            info.AddAppearances(CardAppearanceBehaviour.Appearance.TerrainLayout);
         return info;
     }
 
@@ -544,6 +666,18 @@ public static class CardExtensions
         {
             info.SetEvolve(evolution, numberOfTurns, mods);
         }
+        return info;
+    }
+
+    /// <summary>
+    /// Sets the default evolution name for the card. This is the name used when the card doesn't evolve into another card.
+    /// </summary>
+    /// <param name="info">CardInfo to access.</param>
+    /// <param name="defaultName">The default evolution name to use. Pass in 'null' to use the vanilla default.</param>
+    /// <returns>The same CardInfo so a chain can continue.</returns>
+    public static CardInfo SetDefaultEvolutionName(this CardInfo info, string defaultName)
+    {
+        info.defaultEvolutionName = defaultName;
         return info;
     }
 
@@ -1263,31 +1397,7 @@ public static class CardExtensions
 
     #region Helpers
 
-
-    /// <summary>
-    /// Creates a basic EncounterBlueprintData.CardBlueprint based off the CardInfo object.
-    /// </summary>
-    /// <param name="cardInfo">CardInfo to create the blueprint with.</param>
-    /// <returns>The CardBlueprint object that can be used when creating EncounterData.</returns>
-    public static EncounterBlueprintData.CardBlueprint CreateBlueprint(this CardInfo cardInfo)
-    {
-        return new EncounterBlueprintData.CardBlueprint
-        {
-            card = cardInfo
-        };
-    }
-
-    /// <summary>
-    /// Checks if the CardModificationInfo does not have a specific Ability.
-    /// </summary>
-    /// <param name="mod">CardModificationInfo to access.</param>
-    /// <param name="ability">The ability to check for.</param>
-    /// <returns>true if the ability does not exist.</returns>
-    public static bool LacksAbility(this CardModificationInfo mod, Ability ability)
-    {
-        return !mod.HasAbility(ability);
-    }
-
+    #region Ability
     /// <summary>
     /// Checks if the CardInfo does not have a specific Ability.
     /// </summary>
@@ -1346,7 +1456,9 @@ public static class CardExtensions
         }
         return false;
     }
+    #endregion
 
+    #region SpecialAbility
     /// <summary>
     /// Checks if the CardInfo has a specific SpecialTriggeredAbility.
     ///
@@ -1418,7 +1530,9 @@ public static class CardExtensions
         }
         return false;
     }
+    #endregion
 
+    #region Trait
     /// <summary>
     /// Checks if the CardInfo does not have a specific Trait.
     /// </summary>
@@ -1478,17 +1592,11 @@ public static class CardExtensions
         return false;
     }
 
-    /// <summary>
-    /// Checks if the CardInfo does not belong to a specific Tribe.
-    /// </summary>
-    /// <param name="cardInfo">CardInfo to access.</param>
-    /// <param name="tribe">The tribe to check for.</param>
-    /// <returns>true if the card is not of the specified tribe.</returns>
-    public static bool IsNotOfTribe(this CardInfo cardInfo, Tribe tribe)
-    {
-        return !cardInfo.IsOfTribe(tribe);
-    }
+    public static bool IsPelt(this CardInfo cardInfo) => cardInfo.HasTrait(Trait.Pelt);
+    public static bool IsTerrain(this CardInfo cardInfo) => cardInfo.HasTrait(Trait.Terrain);
+    #endregion
 
+    #region CardMetaCategory
     /// <summary>
     /// Checks if the CardInfo has a specific CardMetaCategory.
     /// </summary>
@@ -1542,6 +1650,39 @@ public static class CardExtensions
         }
         return true;
     }
+    #endregion
+
+    /// <summary>
+    /// Checks if the CardInfo does not belong to a specific Tribe.
+    /// </summary>
+    /// <param name="cardInfo">CardInfo to access.</param>
+    /// <param name="tribe">The tribe to check for.</param>
+    /// <returns>true if the card is not of the specified tribe.</returns>
+    public static bool IsNotOfTribe(this CardInfo cardInfo, Tribe tribe) => !cardInfo.IsOfTribe(tribe);
+
+    public static bool HasAlternatePortrait(this PlayableCard card) => card.Info.alternatePortrait != null;
+    public static bool HasAlternatePortrait(this CardInfo info) => info.alternatePortrait != null;
+
+    /// <summary>
+    /// Checks if the CardModificationInfo does not have a specific Ability.
+    /// </summary>
+    /// <param name="mod">CardModificationInfo to access.</param>
+    /// <param name="ability">The ability to check for.</param>
+    /// <returns>true if the ability does not exist.</returns>
+    public static bool LacksAbility(this CardModificationInfo mod, Ability ability) => !mod.HasAbility(ability);
+
+    /// <summary>
+    /// Creates a basic EncounterBlueprintData.CardBlueprint based off the CardInfo object.
+    /// </summary>
+    /// <param name="cardInfo">CardInfo to create the blueprint with.</param>
+    /// <returns>The CardBlueprint object that can be used when creating EncounterData.</returns>
+    public static EncounterBlueprintData.CardBlueprint CreateBlueprint(this CardInfo cardInfo)
+    {
+        return new EncounterBlueprintData.CardBlueprint
+        {
+            card = cardInfo
+        };
+    }
 
     /// <summary>
     /// Spawns the CardInfo object to the player's hand.
@@ -1565,15 +1706,54 @@ public static class CardExtensions
         yield return CardSpawner.Instance.SpawnCardToHand(cardInfo, temporaryMods, spawnOffset, onDrawnTriggerDelay, cardSpawnedCallback);
     }
 
+    #region Tidal Lock
     /// <summary>
     /// Checks if this card will be killed by the effect of Tidal Lock.
-    /// Primarily exists for modders that want to more easily modify what cards are affected without having to patch the entire sigil.
     /// </summary>
     /// <param name="item">PlayableCard to access.</param>
     /// <returns>True if the card is affected by Tidal Lock.</returns>
-    public static bool IsAffectedByTidalLock(this PlayableCard item)
+    public static bool IsAffectedByTidalLock(this PlayableCard item) => item.Info.IsAffectedByTidalLock();
+
+    /// <summary>
+    /// Checks if this card info will be killed by the effect of Tidal Lock.
+    /// </summary>
+    /// <param name="info">CardInfo to access.</param>
+    /// <returns>True if the card info is affected by Tidal Lock.</returns>
+    public static bool IsAffectedByTidalLock(this CardInfo info) => info.GetExtendedPropertyAsBool("AffectedByTidalLock") ?? false;
+
+    /// <summary>
+    /// Sets whether the card should be killed by Tidal Lock's effect.
+    /// </summary>
+    /// <param name="info">CardInfo to access.</param>
+    /// <returns>True if the card info should be affected by Tidal Lock.</returns>
+    public static CardInfo SetAffectedByTidalLock(this CardInfo info, bool affectedByTidalLock = true)
     {
-        return item.Info.name == "Squirrel" || item.Info.name == "AquaSquirrel" || item.Info.name == "Rabbit";
+        info.SetExtendedProperty("AffectedByTidalLock", affectedByTidalLock);
+        return info;
+    }
+    #endregion
+    
+    /// <summary>
+    /// Gets a PlayableCards using this specific CardInfo.
+    /// Sometimes inscryption clones CardInfo's and sometimes its reused so there may be more than 1 card using the same CardInfo
+    /// </summary>
+    /// <param name="cardInfo">CardInfo to access.</param>
+    /// <returns>Playable Card on the board, in your hand or on display somewhere</returns>
+    public static PlayableCard GetPlayableCard(this CardInfo cardInfo)
+    {
+        if (CostProperties.CostProperties.CardInfoToCard.TryGetValue(cardInfo, out List<WeakReference<PlayableCard>> cardList))
+        {
+            for (int i = cardList.Count - 1; i >= 0; i--)
+            {
+                if (cardList[i].TryGetTarget(out PlayableCard card) && card != null)
+                {
+                    return card;
+                }
+                
+                cardList.RemoveAt(i);
+            }
+        }
+        return null;
     }
 
     #region PlayableCard
@@ -1923,6 +2103,16 @@ public static class CardExtensions
         return playableCard.OpposingSlot()?.Card;
     }
 
+    public static void AddTemporaryMods(this PlayableCard card, params CardModificationInfo[] mods)
+    {
+        foreach (CardModificationInfo mod in mods)
+            card.AddTemporaryMod(mod);
+    }
+    public static void RemoveTemporaryMods(this PlayableCard card, params CardModificationInfo[] mods)
+    {
+        foreach (CardModificationInfo mod in mods)
+            card.RemoveTemporaryMod(mod);
+    }
 
     #endregion
 

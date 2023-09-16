@@ -1,8 +1,5 @@
 using DiskCardGame;
-using InscryptionAPI.Helpers;
 using Sirenix.Utilities;
-using System.Collections;
-using UnityEngine;
 
 namespace InscryptionAPI.Card;
 
@@ -10,6 +7,17 @@ public static class CardModificationInfoExtensions
 {
     public static bool HasDeathCardInfo(this CardModificationInfo mod) => mod.deathCardInfo != null;
 
+    #region Adders
+    public static CardModificationInfo AddDecalIds(this CardModificationInfo mod, params string[] decalIds)
+    {
+        foreach (string decalId in decalIds)
+        {
+            if (!mod.DecalIds.Contains(decalId))
+                mod.DecalIds.Add(decalId);
+        }
+        return mod;
+    }
+    #endregion
     #region Setters
     public static CardModificationInfo SetNameReplacement(this CardModificationInfo mod, string name = null)
     {
@@ -292,5 +300,5 @@ public static class CardModificationInfoExtensions
         mod.GetCardModExtensionTable().TryGetValue(propertyName, out var str);
         return bool.TryParse(str, out var ret) ? ret : null;
     }
-#endregion
+    #endregion
 }
