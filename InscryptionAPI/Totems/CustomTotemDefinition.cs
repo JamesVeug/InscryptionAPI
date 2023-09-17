@@ -5,9 +5,32 @@ namespace InscryptionAPI.Totems;
 
 public class CustomTotemDefinition : TotemDefinition
 {
-    public TotemEffect BottomEffectID;
-    public TotemBottomData.EffectParameters EffectParameters;
+    public CustomTotemTopData.TotemConditionType ConditionID = CustomTotemTopData.TotemConditionType.Tribe;
+    public TotemTopData.TriggerCardPrerequisites TopPrerequisites;
+    
+    public TotemEffect BottomEffectID = TotemEffect.CardGainAbility;
+    public TotemBottomData.EffectParameters BottomEffectParameters;
 
+    public new TotemTopData MakeTop()
+    {
+        // return new TotemTopData(tribe);
+        
+        InscryptionAPIPlugin.Logger.LogInfo($"[CustomTotemDefinition] MakeTop " + ConditionID);
+        CustomTotemTopData instance = ScriptableObject.CreateInstance<CustomTotemTopData>();
+        instance.ConditionID = ConditionID;
+        if (ConditionID == CustomTotemTopData.TotemConditionType.Tribe)
+        {
+            instance.prerequisites = new TotemTopData.TriggerCardPrerequisites();
+            instance.prerequisites.tribe = tribe;
+        }
+        else
+        {
+            instance.prerequisites = TopPrerequisites;
+        }
+
+        return instance;
+    }
+    
     public new TotemBottomData MakeBottom()
     {
         InscryptionAPIPlugin.Logger.LogInfo($"[CustomTotemDefinition] MakeBottom");
@@ -23,7 +46,7 @@ public class CustomTotemDefinition : TotemDefinition
         }
         else
         {
-            instance.effectParams = EffectParameters;
+            instance.effectParams = BottomEffectParameters;
         }
 
         InscryptionAPIPlugin.Logger.LogInfo($"[CustomTotemDefinition] MakeBottom " + instance.effect);

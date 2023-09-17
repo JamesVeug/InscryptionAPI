@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace InscryptionAPI.Totems;
 
-public static class TotemManager
+public static partial class TotemManager
 {
     internal enum TotemTopState
     {
@@ -16,108 +16,13 @@ public static class TotemManager
         AllTribes
     }
 
-    public static CustomTotemBottom NewBottomPiece<T, Y>(string guid, string rulebookName, string rulebookDescription, GameObject prefab) 
-        where T : TotemTriggerReceiver
-        where Y : TotemBottomEffect
-    {
-        if (prefab == null)
-        {
-            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{rulebookName}. Prefab is null!");
-            return null;
-        }
-
-        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, rulebookName);
-        return Add(new CustomTotemBottom()
-        {
-            EffectID = id,
-            RulebookName = rulebookName,
-            RulebookDescription = rulebookDescription,
-            GUID = guid,
-            Prefab = prefab,
-            TriggerReceiver = typeof(T),
-            Effect = typeof(Y),
-        });
-    }
-
-    public static CustomTotemBottom NewBottomPiece<T>(string guid, string rulebookName, string rulebookDescription, Texture icon) where T : TotemTriggerReceiver
-    {
-        if (icon == null)
-        {
-            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewBottomPiece for {guid}.{rulebookName}. Texture is null!");
-            return null;
-        }
-
-        TotemEffect id = GuidManager.GetEnumValue<TotemEffect>(guid, rulebookName);
-        return Add(new CustomTotemBottom()
-        {
-            EffectID = id,
-            RulebookName = rulebookName,
-            RulebookDescription = rulebookDescription,
-            GUID = guid,
-            Icon = icon,
-            Prefab = DefaultTotemBottom,
-            TriggerReceiver = typeof(T)
-        });
-    }
-
-    [Obsolete("Deprecated. Use NewTopPiece<T> instead.")]
-    public static CustomTotemTop NewTopPiece(string name, string guid, Tribe tribe, GameObject prefab = null)
-    {
-        if (prefab == null)
-        {
-            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewTopPiece for {guid}.{name}. Prefab is null!");
-            return null;
-        }
-
-        return Add(new CustomTotemTop()
-        {
-            Name = name,
-            GUID = guid,
-            Prefab = prefab,
-            Tribe = tribe
-        });
-    }
-
-    public static CustomTotemTop NewTopPiece<T>(string name, string guid, Tribe tribe, GameObject prefab) where T : CompositeTotemPiece
-    {
-        if (prefab == null)
-        {
-            InscryptionAPIPlugin.Logger.LogError($"Cannot load NewTopPiece for {guid}.{name}. Prefab is null!");
-            return null;
-        }
-
-        return Add(new CustomTotemTop()
-        {
-            Name = name,
-            GUID = guid,
-            Type = typeof(T),
-            Prefab = prefab,
-            Tribe = tribe
-        });
-    }
-
-    private static CustomTotemTop Add(CustomTotemTop totem)
-    {
-        totemTops.Add(totem);
-        return totem;
-    }
-
-    private static CustomTotemBottom Add(CustomTotemBottom totem)
-    {
-        totemBottoms.Add(totem);
-        
-        TotemBottomEffect totemBottomEffect = (TotemBottomEffect)Activator.CreateInstance(totem.Effect);
-        totemBottomEffect.EffectID = totem.EffectID;
-        allBottomEffects.Add(totemBottomEffect);
-        return totem;
-    }
-
     internal const string CustomTotemTopID = "TotemPieces/TotemTop_Custom";
     internal const string CustomTotemBottomID = "TotemPieces/TotemBottom_CardGainAbility";
     internal const string CustomTotemTopResourcePath = "Prefabs/Items/" + CustomTotemTopID;
     internal const string CustomTotemBottomResourcePath = "Prefabs/Items/" + CustomTotemBottomID;
 
     internal static CustomTotemTop defaultTotemTop = null;
+    internal static List<TotemTopEffect> allTopEffects = new();
     internal readonly static List<CustomTotemTop> totemTops = new();
     
     internal static GameObject defaultTotemBottom = null;

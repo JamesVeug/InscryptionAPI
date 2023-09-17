@@ -121,6 +121,79 @@ internal static class ItemsUtil_AllConsumables
         return codes;
     }
 
+    internal static List<ItemData> GenerateTotemChoices(BuildTotemNodeData nodeData, int randomSeed)
+    {
+        List<ItemData> tops = GenerateTotemTopChoices(ref randomSeed);
+        List<ItemData> bottoms = GenerateTotemBottomChoices(ref randomSeed);
+        
+        return TotemsUtil.AlternateTopsAndBottoms(tops, bottoms);
+    }
+    
+    private static List<ItemData> GenerateTotemTopChoices(ref int randomSeed)
+    {
+        List<Tribe> list = new List<Tribe>
+        {
+            Tribe.Bird,
+            Tribe.Canine,
+            Tribe.Hooved,
+            Tribe.Insect,
+            Tribe.Reptile
+        };
+        if (StoryEventsData.EventCompleted(StoryEvent.SquirrelHeadDiscovered))
+        {
+            list.Add(Tribe.Squirrel);
+        }
+        foreach (Tribe totemTop in RunState.Run.totemTops)
+        {
+            list.Remove(totemTop);
+        }
+        
+        List<ItemData> tops = new List<ItemData>();
+        for (int i = 0; i < list.Count; i++)
+        {
+            TotemTopData totemTopData = new TotemTopData();
+            totemTopData.prerequisites = new TotemTopData.TriggerCardPrerequisites();
+            totemTopData.prerequisites.tribe = list[i];
+            list.Remove(totemTopData.prerequisites.tribe);
+            tops.Add(totemTopData);
+        }
+        tops.SeededShuffle(randomSeed++);
+
+        return tops;
+    }
+    
+    private static List<ItemData> GenerateTotemBottomChoices(ref int randomSeed)
+    {
+        List<Ability> allAbilities = new List<Ability>(ProgressionData.Data.learnedAbilities);
+        allAbilities.RemoveAll((Ability x) => RunState.Run.totemBottoms.Contains(x) || !AbilitiesUtil.GetInfo(x).metaCategories.Contains(AbilityMetaCategory.Part1Modular));
+        
+        List<ItemData> bottoms = new List<ItemData>();
+        while(allAbilities.Count > 0)
+        {
+            TotemBottomData totemBottomData = ScriptableObject.CreateInstance<TotemBottomData>();
+            totemBottomData.effect = TotemEffect.CardGainAbility;
+            totemBottomData.effectParams = new TotemBottomData.EffectParameters();
+            if (allAbilities.Count > 0)
+            {
+                int powerLevelRoll = SeededRandom.Range(0, 7, randomSeed++);
+                List<Ability> list5 = allAbilities.FindAll((Ability x) => AbilitiesUtil.GetInfo(x).powerLevel <= powerLevelRoll);
+                if (list5.Count > 0)
+                {
+                    totemBottomData.effectParams.ability = list5[SeededRandom.Range(0, list5.Count, randomSeed++)];
+                    allAbilities.Remove(totemBottomData.effectParams.ability);
+                }
+            }
+            else
+            {
+                allAbilities.RemoveAt(0);
+            }
+            
+            bottoms.Add(totemBottomData);
+        }
+
+        return bottoms;
+    }
+
     internal static void FillWithRandomTotemBottoms(List<ItemData> list, ref int seed)
     {
         InscryptionAPIPlugin.Logger.LogInfo($"Starting FillWithRandomTotemBottoms " + list.Count + " " + seed);
@@ -756,7 +829,7 @@ internal static class BuildTotemSequencer_BuildPhase
             definition = new CustomTotemDefinition()
             {
                 BottomEffectID = bottomData.bottom.effect,
-                EffectParameters = bottomData.bottom.effectParams,
+                BottomEffectParameters = bottomData.bottom.effectParams,
                 tribe = bottomData.top.prerequisites.tribe,
             };
         }
