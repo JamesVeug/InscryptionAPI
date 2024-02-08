@@ -15,7 +15,7 @@ using UnityEngine;
 namespace InscryptionAPI.Card;
 
 [HarmonyPatch]
-public static class CardManager
+public static partial class CardManager
 {
     private class CardExt // Needs to be defined first so the implicit static constructor works correctly
     {
@@ -473,10 +473,13 @@ public static class CardManager
 
         MethodInfo CloneMethodInfo = SymbolExtensions.GetMethodInfo(() => CardLoader.Clone(null));
         MethodInfo LogCardInfoMethodInfo = SymbolExtensions.GetMethodInfo(() => LogCardInfo(null, null));
+        MethodInfo InjectGetNewCardMethodInfo = SymbolExtensions.GetMethodInfo(() => InjectGetNewCard(null, null));
         for (int i = 0; i < codes.Count; i++)
         {
             if (codes[i].opcode == OpCodes.Call && codes[i].operand == CloneMethodInfo)
             {
+                codes.Insert(i++, new CodeInstruction(OpCodes.Ldarg_0)); // name
+                codes.Insert(i++, new CodeInstruction(OpCodes.Call, InjectGetNewCardMethodInfo)); // InjectGetNewCard
                 codes.Insert(i++, new CodeInstruction(OpCodes.Ldarg_0)); // name
                 codes.Insert(i++, new CodeInstruction(OpCodes.Call, LogCardInfoMethodInfo)); // LogCardInfo
                 break;
@@ -484,6 +487,14 @@ public static class CardManager
         }
 
         return codes;
+    }
+
+    public static CardInfo InjectGetNewCard(CardInfo info, string cardInfoName)
+    {
+        if (info == null)
+            return GetTemporaryCard(cardInfoName);
+
+        return info;
     }
 
     public static CardInfo LogCardInfo(CardInfo info, string cardInfoName)
